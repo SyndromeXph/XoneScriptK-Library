@@ -1,6 +1,5 @@
 --============================================================
 -- XoneScriptK Example (requires lib.luau)
--- Obsidian / Linoria style: Window:AddTab, Groupbox,
 -- AddToggle/AddSlider/AddDropdown..., Library.Toggles / Library.Options global access.
 --============================================================
 
