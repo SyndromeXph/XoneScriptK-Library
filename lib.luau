@@ -586,6 +586,15 @@ function Library:_RefreshFadeMap(Old, New)
 	end;
 	return New;
 end;
+function Library:_SnapFadeGroup(Map, Mode)
+	for Inst, PMap in (Map or {}) do
+		if Inst and Inst.Parent then
+			for P, Orig in PMap do
+				pcall(function() Inst[P] = (Mode == "out") and 1 or Orig end);
+			end;
+		end;
+	end;
+end;
 Library._ActiveDraggers = {};
 function Library:_RegisterDragger(Handler)
 	if typeof(Handler) ~= "function" then return end;
@@ -858,6 +867,8 @@ function Library:ClampPopupXY(Popup, X, Y)
 	return X, Y;
 end;
 function Library:_MakeSatelliteBindable(Obj)
+	Library._SatelliteWindows = Library._SatelliteWindows or {};
+	table.insert(Library._SatelliteWindows, Obj);
 	Obj._BoundWindow  = nil;
 	Obj._BoundTab     = nil;
 	Obj._SyncedWindow = nil;
@@ -5738,10 +5749,14 @@ RegisterGradLerp(GradEntry)
 		return Map;
 	end;
 	function Window:SetVisible(State)
-		if self.Visible == State then return end;
-		self.Visible = State and true or false;
-		if Library._ReduceAnimations then Gui.Enabled = self.Visible; AnimScale.Scale = 1; return end;
+		State = State and true or false;
+		if self.Visible == State and Gui.Enabled == State and not self._ActiveFade then return end;
+		self.Visible = State;
 		if self._ActiveFade then self._ActiveFade:Disconnect(); self._ActiveFade = nil end;
+		if Library._ReduceAnimations then
+			Library:_SnapFadeGroup(self._FadeOriginals, State and "in" or "out");
+			Gui.Enabled = State; AnimScale.Scale = 1; self._FadeClean = true; return;
+		end;
 		if not self.Visible then
 			local NewMap = CaptureOriginals();
 			if self._FadeClean or not self._FadeOriginals then
@@ -5760,7 +5775,7 @@ RegisterGradLerp(GradEntry)
 			}):Play();
 			self._FadeClean = false;
 			self._ActiveFade = Library:_FadeGroup(self._FadeOriginals, "in", 0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function()
-				self._FadeClean = true;
+				self._ActiveFade = nil; self._FadeClean = true;
 			end);
 		else
 			Library:Tween(AnimScale, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
@@ -5769,7 +5784,7 @@ RegisterGradLerp(GradEntry)
 			self._FadeClean = false;
 			self._ActiveFade = Library:_FadeGroup(self._FadeOriginals, "out", 0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
 				if not self.Visible then Gui.Enabled = false end;
-				self._FadeClean = true;
+				self._ActiveFade = nil; self._FadeClean = true;
 			end);
 		end;
 	end;
@@ -6706,10 +6721,14 @@ function Library:Playerlist(Opts)
 	end;
 	local Obj = { Gui = Gui, Outer = Outer, _Visible = true };
 	function Obj:SetVisible(State)
-		if self._Visible == State then return end;
+		State = State and true or false;
+		if self._Visible == State and Gui.Enabled == State and not ActiveFade then return end;
 		self._Visible = State;
-		if Library._ReduceAnimations then Gui.Enabled = State and true or false; return end;
 		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
+		if Library._ReduceAnimations then
+			Library:_SnapFadeGroup(FadeOriginals, State and "in" or "out");
+			Gui.Enabled = State; return;
+		end;
 		if not State then
 			FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
 		elseif not FadeOriginals then
@@ -6717,10 +6736,13 @@ function Library:Playerlist(Opts)
 		end;
 		if State then
 			Gui.Enabled = true;
-			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out);
+			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function()
+				ActiveFade = nil;
+			end);
 		else
 			ActiveFade = Library:_FadeGroup(FadeOriginals, "out", 0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
 				if not self._Visible then Gui.Enabled = false end;
+				ActiveFade = nil;
 			end);
 		end;
 	end;
@@ -7847,10 +7869,14 @@ function Library:PreviewWindow(Opts)
 	end;
 	local Obj = { Gui = Gui, Outer = Outer, Preview = Core, _Visible = true };
 	function Obj:SetVisible(State)
-		if self._Visible == State then return end;
+		State = State and true or false;
+		if self._Visible == State and Gui.Enabled == State and not ActiveFade then return end;
 		self._Visible = State;
-		if Library._ReduceAnimations then Gui.Enabled = State and true or false; return end;
 		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
+		if Library._ReduceAnimations then
+			Library:_SnapFadeGroup(FadeOriginals, State and "in" or "out");
+			Gui.Enabled = State; return;
+		end;
 		if not State then
 			FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
 		elseif not FadeOriginals then
@@ -7858,10 +7884,13 @@ function Library:PreviewWindow(Opts)
 		end;
 		if State then
 			Gui.Enabled = true;
-			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out);
+			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function()
+				ActiveFade = nil;
+			end);
 		else
 			ActiveFade = Library:_FadeGroup(FadeOriginals, "out", 0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
 				if not self._Visible then Gui.Enabled = false end;
+				ActiveFade = nil;
 			end);
 		end;
 	end;
@@ -8166,10 +8195,14 @@ function Library:LogWindow(Opts)
 	end;
 	local Obj = { Gui = Gui, Outer = Outer, _Visible = true };
 	function Obj:SetVisible(State)
-		if self._Visible == State then return end;
+		State = State and true or false;
+		if self._Visible == State and Gui.Enabled == State and not ActiveFade then return end;
 		self._Visible = State;
-		if Library._ReduceAnimations then Gui.Enabled = State and true or false; return end;
 		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
+		if Library._ReduceAnimations then
+			Library:_SnapFadeGroup(FadeOriginals, State and "in" or "out");
+			Gui.Enabled = State; return;
+		end;
 		if not State then
 			FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
 		elseif not FadeOriginals then
@@ -8177,10 +8210,13 @@ function Library:LogWindow(Opts)
 		end;
 		if State then
 			Gui.Enabled = true;
-			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out);
+			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function()
+				ActiveFade = nil;
+			end);
 		else
 			ActiveFade = Library:_FadeGroup(FadeOriginals, "out", 0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
 				if not self._Visible then Gui.Enabled = false end;
+				ActiveFade = nil;
 			end);
 		end;
 	end;
@@ -8535,10 +8571,14 @@ local Outer = self:CreateInstance("Frame", {
 	end;
 	local Obj = { Gui = Gui, Outer = Outer, Label = StatusPart, _Visible = true };
 	function Obj:SetVisible(State)
-		if self._Visible == State then return end;
+		State = State and true or false;
+		if self._Visible == State and Gui.Enabled == State and not ActiveFade then return end;
 		self._Visible = State;
-		if Library._ReduceAnimations then Gui.Enabled = State and true or false; return end;
 		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
+		if Library._ReduceAnimations then
+			Library:_SnapFadeGroup(FadeOriginals, State and "in" or "out");
+			Gui.Enabled = State; return;
+		end;
 		if not State then
 			FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
 		elseif not FadeOriginals then
@@ -8546,10 +8586,13 @@ local Outer = self:CreateInstance("Frame", {
 		end;
 		if State then
 			Gui.Enabled = true;
-			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out);
+			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function()
+				ActiveFade = nil;
+			end);
 		else
 			ActiveFade = Library:_FadeGroup(FadeOriginals, "out", 0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
 				if not self._Visible then Gui.Enabled = false end;
+				ActiveFade = nil;
 			end);
 		end;
 	end;
@@ -9529,10 +9572,14 @@ function Library:InvViewer(Opts)
 	local Obj = { Gui = Gui, Outer = Outer, _Visible = false };
 	Gui.Enabled = false;
 	function Obj:SetVisible(State)
-		if self._Visible == State then return end;
+		State = State and true or false;
+		if self._Visible == State and Gui.Enabled == State and not ActiveFade then return end;
 		self._Visible = State;
-		if Library._ReduceAnimations then Gui.Enabled = State and true or false; return end;
 		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
+		if Library._ReduceAnimations then
+			Library:_SnapFadeGroup(FadeOriginals, State and "in" or "out");
+			Gui.Enabled = State; return;
+		end;
 		if not State then
 			FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
 		elseif not FadeOriginals then
@@ -9541,13 +9588,16 @@ function Library:InvViewer(Opts)
 		if State then
 			Gui.Enabled   = true;
 			Outer.Visible = true;
-			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out);
+			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function()
+				ActiveFade = nil;
+			end);
 		else
 			ActiveFade = Library:_FadeGroup(FadeOriginals, "out", 0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
 				if not self._Visible then
 					Gui.Enabled   = false;
 					Outer.Visible = false;
 				end;
+				ActiveFade = nil;
 			end);
 		end;
 	end;
@@ -9601,6 +9651,12 @@ Library:Connection(UserInputService.InputBegan, function(Input, GameProc)
 end);
 function Library:SetReduceAnimations(B)
 	Library._ReduceAnimations = B and true or false;
+	for _, W in ipairs(Library._Windows or {}) do
+		if W.Gui and W.Gui.Parent and W.SetVisible then W:SetVisible(W.Visible == true) end;
+	end;
+	for _, Obj in ipairs(Library._SatelliteWindows or {}) do
+		if Obj.Gui and Obj.Gui.Parent and Obj.SetVisible then Obj:SetVisible(Obj._Visible == true) end;
+	end;
 end;
 do
 	local GuiRoot = (gethui and gethui()) or CoreGui;
