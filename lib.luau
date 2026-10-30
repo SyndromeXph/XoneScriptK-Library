@@ -1526,7 +1526,9 @@ local function BuildSection(Host, SecOpts)
 		CollapseAnim += 1;
 		local Mine = CollapseAnim;
 		CollapseBtn.Text = Collapsed and "+" or "-";
+		local CurrentHeight = math.max(Sec.AbsoluteSize.Y / Library:_GetUIScaleOf(Sec), 16);
 		Sec.AutomaticSize = Enum.AutomaticSize.None;
+		Sec.Size = UDim2.new(1, 0, 0, CurrentHeight);
 		Sec.ClipsDescendants = true;
 		Body.Visible = not Collapsed;
 		task.defer(function()
