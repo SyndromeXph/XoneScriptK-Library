@@ -208,7 +208,7 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     WindowOutline.Size = WindowSize
     WindowOutline.Thickness = 0
     WindowOutline.Color = Color3.fromHex("#000005")
-    WindowOutline.Visible = true
+    WindowOutline.Visible = false
     WindowOutline.Filled = true
     WindowOutline.Position = Vector2.new(MiddleX, MiddleY)
     table.insert(Drawings, WindowOutline)
@@ -217,7 +217,7 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     WindowOutlineBorder.Position = Vector2.new(WindowOutline.Position.X + 1, WindowOutline.Position.Y + 1)
     WindowOutlineBorder.Thickness = 0
     WindowOutlineBorder.Color = Color3.fromHex("#7885f5")
-    WindowOutlineBorder.Visible = true
+    WindowOutlineBorder.Visible = false
     WindowOutlineBorder.Filled = true
     table.insert(Drawings, WindowOutlineBorder)
     local WindowFrame = Drawing.new("Square")
@@ -226,7 +226,7 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     WindowFrame.Thickness = 0
     WindowFrame.Transparency = 1
     WindowFrame.Color = Color3.fromHex("#191919")
-    WindowFrame.Visible = true
+    WindowFrame.Visible = false
     WindowFrame.Filled = true
     table.insert(Drawings, WindowFrame)
     local WindowTitle = Drawing.new("Text")
@@ -235,7 +235,7 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     WindowTitle.Color = Color3.fromHex("#e8e8e8")
     WindowTitle.Text = Title
     WindowTitle.Position = Vector2.new(WindowFrame.Position.X + (WindowFrame.Size.X / 2), WindowOutlineBorder.Position.Y + 8)
-    WindowTitle.Visible = true
+    WindowTitle.Visible = false
     WindowTitle.Center = true
     WindowTitle.Outline = false
     table.insert(Drawings, WindowTitle)
@@ -243,7 +243,7 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     WindowText.Font = Drawing.Fonts.Plex
     WindowText.Size = 13
     WindowText.Color = Color3.fromHex("#e8e8e8")
-    WindowText.Visible = true
+    WindowText.Visible = false
     WindowText.Center = true
     WindowText.Outline = false
     table.insert(Drawings, WindowText)
@@ -252,7 +252,7 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     SliderInline.Color = Color3.fromHex("#323232")
     SliderInline.Transparency = 0.75
     SliderInline.Thickness = 0
-    SliderInline.Visible = true
+    SliderInline.Visible = false
     SliderInline.Filled = true
     table.insert(Drawings, SliderInline)
     local SliderOutline = Drawing.new("Square")
@@ -260,31 +260,32 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     SliderOutline.Color = Color3.fromHex("#000005")
     SliderOutline.Transparency = 0.5
     SliderOutline.Thickness = 0
-    SliderOutline.Visible = true
+    SliderOutline.Visible = false
     SliderOutline.Filled = true
     table.insert(Drawings, SliderOutline)
     local SliderFrame = Drawing.new("Square")
     SliderFrame.Color = Color3.fromHex("#7885f5")
     SliderFrame.Transparency = 0.75
     SliderFrame.Thickness = 0
-    SliderFrame.Visible = true
+    SliderFrame.Visible = false
     SliderFrame.Filled = true
     table.insert(Drawings, SliderFrame)
     local SliderTip = Drawing.new("Square")
     SliderTip.Color = Color3.fromHex("#b9c1ff")
     SliderTip.Transparency = 0.45
     SliderTip.Thickness = 0
-    SliderTip.Visible = true
+    SliderTip.Visible = false
     SliderTip.Filled = true
     table.insert(Drawings, SliderTip)
     local MiddleIcon = Drawing.new("Image");
     MiddleIcon.Size = Vector2.new(185, 185);
     MiddleIcon.Rounding = 5;
     MiddleIcon.Transparency = 1;
-    MiddleIcon.Visible = true;
+    MiddleIcon.Visible = false;
     local LogoData = ResolveLoaderImage(LogoSrc);
     if LogoData then
         MiddleIcon.Data = LogoData;
+        MiddleIcon.Visible = true;
     else
         MiddleIcon.Visible = false;
     end
@@ -308,10 +309,15 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     end;
     Library:OnAccent(ApplyAccent);
     local FadeTargets = {}
+    local FadeVisible = {}
     for _, D in ipairs(Drawings) do
         FadeTargets[D] = D.Transparency
+        FadeVisible[D] = true
+        D.Visible = false
         D.Transparency = 0
     end
+    FadeVisible[MiddleIcon] = LogoData ~= nil
+    FadeVisible[SliderTip] = false
     local RS = game:GetService("RunService")
     local function Fade(From, To, Duration)
         local Start = os.clock()
@@ -358,6 +364,9 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
         Fade(1, 0, 0.3)
         SlideDone = true
         for _, D in ipairs(Drawings) do pcall(function() D:Remove() end) end
+    end
+    for _, D in ipairs(Drawings) do
+        D.Visible = FadeVisible[D]
     end
     Fade(0, 1, 0.35)
     return Loader
@@ -5700,6 +5709,9 @@ RegisterGradLerp(GradEntry)
 		ScrollingFrame = { "BackgroundTransparency", "ScrollBarImageTransparency" };
 		CanvasGroup    = { "BackgroundTransparency", "GroupTransparency" };
 		UIStroke       = { "Transparency" };
+		UIShadow       = { "Transparency" };
+		ViewportFrame  = { "BackgroundTransparency", "ImageTransparency" };
+		VideoFrame     = { "BackgroundTransparency", "ImageTransparency" };
 	};
 	local function CaptureOriginals()
 		local Map = {};
@@ -6676,6 +6688,7 @@ function Library:Playerlist(Opts)
 			TextBox = {"BackgroundTransparency","TextTransparency"};
 			ScrollingFrame = {"BackgroundTransparency"};
 			UIStroke = {"Transparency"};
+			UIShadow = {"Transparency"};
 		};
 		local function Cap(Inst)
 			local Props = Types[Inst.ClassName];
@@ -7816,6 +7829,7 @@ function Library:PreviewWindow(Opts)
 			ImageLabel = {"BackgroundTransparency","ImageTransparency"};
 			ViewportFrame = {"ImageTransparency"};
 			UIStroke = {"Transparency"};
+			UIShadow = {"Transparency"};
 		};
 		local function Cap(Inst)
 			local Props = Types[Inst.ClassName];
@@ -8134,6 +8148,7 @@ function Library:LogWindow(Opts)
 			TextButton = {"BackgroundTransparency","TextTransparency"};
 			ScrollingFrame = {"BackgroundTransparency"};
 			UIStroke = {"Transparency"};
+			UIShadow = {"Transparency"};
 		};
 		local function Cap(Inst)
 			local Props = Types[Inst.ClassName];
@@ -8502,6 +8517,7 @@ local Outer = self:CreateInstance("Frame", {
 			Frame     = { "BackgroundTransparency" };
 			TextLabel = { "BackgroundTransparency", "TextTransparency" };
 			UIStroke  = { "Transparency" };
+			UIShadow  = { "Transparency" };
 		};
 		local function Cap(Inst)
 			local Props = Types[Inst.ClassName];
@@ -9492,6 +9508,7 @@ function Library:InvViewer(Opts)
 			TextLabel      = { "BackgroundTransparency", "TextTransparency" };
 			ScrollingFrame = { "BackgroundTransparency", "ScrollBarImageTransparency" };
 			UIStroke       = { "Transparency" };
+			UIShadow       = { "Transparency" };
 		};
 		local function Cap(Inst)
 			local Props = Types[Inst.ClassName];
@@ -9963,6 +9980,32 @@ do
 		end;
 		return Arr;
 	end;
+	local MediaCache = {};
+	local MediaCount = 0;
+	local function ResolveMedia(Source, DefaultExtension)
+		if typeof(Source) == "number" then Source = "rbxassetid://" .. tostring(Source) end;
+		if typeof(Source) ~= "string" or Source == "" then return nil end;
+		if string.match(Source, "^rbxassetid://") or string.match(Source, "^rbxthumb://") or string.match(Source, "^rbxgameasset://") then
+			return Source;
+		end;
+		if MediaCache[Source] then return MediaCache[Source] end;
+		local Path = Source;
+		if string.match(Source, "^https?://") then
+			MediaCount += 1;
+			Path = Library.Directory .. "/media_" .. tostring(MediaCount) .. (DefaultExtension or ".png");
+			if not (isfile and isfile(Path)) then
+				local Ok, Data = pcall(function() return game:HttpGet(Source) end);
+				if not Ok or typeof(Data) ~= "string" or #Data == 0 then return nil end;
+				local Wrote = pcall(writefile, Path, Data);
+				if not Wrote then return nil end;
+			end;
+		end;
+		if not (isfile and isfile(Path)) then return nil end;
+		local Ok, Asset = pcall(getcustomasset, Path);
+		if not Ok or not Asset then return nil end;
+		MediaCache[Source] = Asset;
+		return Asset;
+	end;
 	local function EnhanceSection(Sec)
 		if typeof(Sec) ~= "table" or Sec._ObsidianAPI then return Sec end;
 		Sec._ObsidianAPI = true;
@@ -10201,6 +10244,357 @@ do
 				Callback = Cb;
 			});
 			return WrapColorProxy(Idx, Library.Options[Idx], CProxy);
+		end;
+		Sec.AddViewport = function(self, Idx, Info)
+			Info = typeof(Info) == "table" and Info or {};
+			Idx = tostring(Idx or "Viewport");
+			assert(typeof(Info.Object) == "Instance" and (Info.Object:IsA("BasePart") or Info.Object:IsA("Model")), "Object must be a BasePart or Model.");
+			local SourceObject = Info.Object;
+			local ViewportObject = SourceObject;
+			if Info.Clone ~= false then
+				local WasArchivable = SourceObject.Archivable;
+				SourceObject.Archivable = true;
+				ViewportObject = SourceObject:Clone();
+				SourceObject.Archivable = WasArchivable;
+			end;
+			local Camera = Info.Camera or Instance.new("Camera");
+			assert(typeof(Camera) == "Instance" and Camera:IsA("Camera"), "Camera must be a Camera instance.");
+			Camera.CameraType = Enum.CameraType.Scriptable;
+			local Height = math.max(24, tonumber(Info.Height) or 200);
+			local Holder = Library:CreateInstance("Frame", {
+				Name = Idx; Parent = self.Body; Size = UDim2.new(1, 0, 0, Height);
+				BackgroundTransparency = 1; Visible = Info.Visible ~= false;
+			});
+			local Box = Library:CreateInstance("Frame", {
+				Parent = Holder; Size = UDim2.fromScale(1, 1); BackgroundColor3 = Color3.fromHex("151515");
+				BorderSizePixel = 0; ClipsDescendants = true;
+			});
+			Library:CreateInstance("UIStroke", { Parent = Box; Color = Color3.fromHex("252527"); Thickness = 1; });
+			Library:CreateInstance("UIPadding", {
+				Parent = Box; PaddingBottom = UDim.new(0, 4); PaddingLeft = UDim.new(0, 4);
+				PaddingRight = UDim.new(0, 4); PaddingTop = UDim.new(0, 4);
+			});
+			local ViewportFrame = Library:CreateInstance("ViewportFrame", {
+				Parent = Box; Size = UDim2.fromScale(1, 1); BackgroundTransparency = 1;
+				CurrentCamera = Camera; Active = Info.Interactive == true;
+			});
+			local Viewport = {
+				Type = "Viewport"; Object = ViewportObject; Camera = Camera;
+				Interactive = Info.Interactive == true; AutoFocus = Info.AutoFocus ~= false;
+				Visible = Info.Visible ~= false; Height = Height; Holder = Holder;
+				ViewportFrame = ViewportFrame; Connections = {}; Destroyed = false;
+			};
+			local Dragging, Pinching, Hovering = false, false, false;
+			local LastMousePos, LastPinchDist = nil, 0;
+			local Scroll = self.Body:FindFirstAncestorOfClass("ScrollingFrame");
+			local function UpdateScroll()
+				if Scroll then Scroll.ScrollingEnabled = not (Viewport.Interactive and (Hovering or Dragging or Pinching)) end;
+			end;
+			local function Track(Signal, Fn)
+				local Conn = Library:Connection(Signal, Fn);
+				table.insert(Viewport.Connections, Conn);
+				return Conn;
+			end;
+			local function GetPivotPosition()
+				return Viewport.Object:GetPivot().Position;
+			end;
+			local function GetObjectSize()
+				if Viewport.Object:IsA("BasePart") then return Viewport.Object.Size end;
+				return select(2, Viewport.Object:GetBoundingBox());
+			end;
+			local function FocusCamera()
+				if not Viewport.Object then return end;
+				local Size = GetObjectSize();
+				local Extent = math.max(Size.X, Size.Y, Size.Z, 0.1);
+				local Position = GetPivotPosition();
+				Viewport.Camera.CFrame = CFrame.lookAt(Position + Vector3.new(0, Extent * 0.35, Extent * 2.2), Position);
+			end;
+			local function OrbitCamera(Yaw, Pitch)
+				if not Viewport.Object then return end;
+				local Position = GetPivotPosition();
+				local RotationY = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), Yaw);
+				Viewport.Camera.CFrame = CFrame.new(Position) * RotationY * CFrame.new(-Position) * Viewport.Camera.CFrame;
+				local RotationX = CFrame.fromAxisAngle(Viewport.Camera.CFrame.RightVector, Pitch);
+				local Pitched = CFrame.new(Position) * RotationX * CFrame.new(-Position) * Viewport.Camera.CFrame;
+				if Pitched.UpVector.Y > 0.1 then Viewport.Camera.CFrame = Pitched end;
+			end;
+			local function ZoomCamera(Amount)
+				if not Viewport.Object then return end;
+				local Position = GetPivotPosition();
+				local Offset = Viewport.Camera.CFrame.Position - Position;
+				local Distance = Offset.Magnitude;
+				local Direction = Distance > 0 and Offset.Unit or -Viewport.Camera.CFrame.LookVector;
+				local NewDistance = math.clamp(Distance - Amount, 0.05, 10000);
+				Viewport.Camera.CFrame = CFrame.lookAt(Position + Direction * NewDistance, Position);
+			end;
+			local function IsOverFrame(Position)
+				local P, S = ViewportFrame.AbsolutePosition, ViewportFrame.AbsoluteSize;
+				return Position.X >= P.X and Position.X <= P.X + S.X and Position.Y >= P.Y and Position.Y <= P.Y + S.Y;
+			end;
+			Track(ViewportFrame.MouseEnter, function()
+				Hovering = true; UpdateScroll();
+			end);
+			Track(ViewportFrame.MouseLeave, function()
+				Hovering = false; UpdateScroll();
+			end);
+			Track(ViewportFrame.InputBegan, function(Input)
+				if not Viewport.Interactive then return end;
+				if Input.UserInputType == Enum.UserInputType.MouseButton2 or (Input.UserInputType == Enum.UserInputType.Touch and not Pinching) then
+					Dragging = true; LastMousePos = Input.Position; Library.CanDrag = false; UpdateScroll();
+				end;
+			end);
+			Track(UserInputService.InputEnded, function(Input)
+				if Dragging and (Input.UserInputType == Enum.UserInputType.MouseButton2 or Input.UserInputType == Enum.UserInputType.Touch) then
+					Dragging = false; LastMousePos = nil; Library.CanDrag = true; UpdateScroll();
+				end;
+			end);
+			Track(UserInputService.InputChanged, function(Input)
+				if not Viewport.Interactive or not Dragging or Pinching or not LastMousePos then return end;
+				if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
+					local Delta = Input.Position - LastMousePos;
+					LastMousePos = Input.Position;
+					OrbitCamera(-Delta.X * 0.01, -Delta.Y * 0.01);
+				end;
+			end);
+			Track(ViewportFrame.InputChanged, function(Input)
+				if Viewport.Interactive and Input.UserInputType == Enum.UserInputType.MouseWheel then ZoomCamera(Input.Position.Z * 2) end;
+			end);
+			Track(UserInputService.TouchPinch, function(Positions, _, _, State)
+				if not Viewport.Interactive or #Positions < 2 or not IsOverFrame(Positions[1]) then return end;
+				if State == Enum.UserInputState.Begin then
+					Pinching = true; Dragging = false; Library.CanDrag = true; LastPinchDist = (Positions[1] - Positions[2]).Magnitude; UpdateScroll();
+				elseif State == Enum.UserInputState.Change then
+					local Distance = (Positions[1] - Positions[2]).Magnitude;
+					ZoomCamera((Distance - LastPinchDist) * 0.1); LastPinchDist = Distance;
+				elseif State == Enum.UserInputState.End or State == Enum.UserInputState.Cancel then
+					Pinching = false; UpdateScroll();
+				end;
+			end);
+			ViewportObject.Parent = ViewportFrame;
+			if Viewport.AutoFocus then FocusCamera() end;
+			function Viewport:SetObject(Object, Clone)
+				assert(typeof(Object) == "Instance" and (Object:IsA("BasePart") or Object:IsA("Model")), "Object must be a BasePart or Model.");
+				if Clone then
+					local Source = Object;
+					local WasArchivable = Source.Archivable; Source.Archivable = true;
+					Object = Source:Clone(); Source.Archivable = WasArchivable;
+				end;
+				if self.Object then self.Object:Destroy() end;
+				self.Object = Object; Object.Parent = ViewportFrame;
+				if self.AutoFocus then FocusCamera() end;
+			end;
+			function Viewport:SetHeight(NewHeight)
+				assert(typeof(NewHeight) == "number" and NewHeight > 0, "Height must be greater than 0.");
+				self.Height = NewHeight; Holder.Size = UDim2.new(1, 0, 0, NewHeight);
+			end;
+			function Viewport:Focus() FocusCamera() end;
+			function Viewport:SetCamera(NewCamera)
+				assert(typeof(NewCamera) == "Instance" and NewCamera:IsA("Camera"), "Camera must be a Camera instance.");
+				self.Camera = NewCamera; NewCamera.CameraType = Enum.CameraType.Scriptable; ViewportFrame.CurrentCamera = NewCamera;
+			end;
+			function Viewport:SetCameraCFrame(NewCFrame)
+				assert(typeof(NewCFrame) == "CFrame", "NewCFrame must be a CFrame."); self.Camera.CFrame = NewCFrame;
+			end;
+			function Viewport:GetCameraCFrame() return self.Camera.CFrame end;
+			function Viewport:Rotate(Yaw, Pitch) OrbitCamera(math.rad(Yaw or 0), math.rad(Pitch or 0)) end;
+			function Viewport:Zoom(Amount) assert(typeof(Amount) == "number", "Amount must be a number."); ZoomCamera(Amount) end;
+			function Viewport:LookAt(Target)
+				if not Target and not self.Object then return end;
+				self.Camera.CFrame = CFrame.lookAt(self.Camera.CFrame.Position, Target or GetPivotPosition());
+			end;
+			function Viewport:SetDistance(Distance)
+				assert(typeof(Distance) == "number" and Distance > 0, "Distance must be greater than 0.");
+				if not self.Object then return end;
+				local Position = GetPivotPosition();
+				local Offset = self.Camera.CFrame.Position - Position;
+				local Direction = Offset.Magnitude > 0 and Offset.Unit or -self.Camera.CFrame.LookVector;
+				self.Camera.CFrame = CFrame.lookAt(Position + Direction * Distance, Position);
+			end;
+			function Viewport:GetDistance()
+				return self.Object and (self.Camera.CFrame.Position - GetPivotPosition()).Magnitude or 0;
+			end;
+			function Viewport:SetFieldOfView(FieldOfView)
+				assert(typeof(FieldOfView) == "number", "FieldOfView must be a number.");
+				self.Camera.FieldOfView = math.clamp(FieldOfView, 1, 120);
+			end;
+			function Viewport:SetInteractive(Interactive)
+				self.Interactive = Interactive == true; ViewportFrame.Active = self.Interactive;
+				if not self.Interactive then
+					if Dragging or Pinching then Library.CanDrag = true end;
+					Dragging, Pinching = false, false;
+				end;
+				UpdateScroll();
+			end;
+			function Viewport:SetVisible(Visible) self.Visible = Visible == true; Holder.Visible = self.Visible end;
+			function Viewport:Destroy()
+				if self.Destroyed then return end;
+				self.Destroyed = true;
+				for _, Conn in ipairs(self.Connections) do Conn:Disconnect() end;
+				if Dragging or Pinching then Library.CanDrag = true end;
+				Dragging, Pinching, Hovering = false, false, false; UpdateScroll();
+				Holder:Destroy();
+				if Library.Options[Idx] == self then Library.Options[Idx] = nil end;
+			end;
+			Library.Options[Idx] = Viewport;
+			return Viewport;
+		end;
+		Sec.AddImage = function(self, Idx, Info)
+			Info = typeof(Info) == "table" and Info or {};
+			Idx = tostring(Idx or "Image");
+			local Source = Info.Image;
+			if Source == nil then Source = Info.Icon end;
+			local Asset = ResolveMedia(Source, ".png");
+			assert(Asset, "Image must be a valid asset, URL, or local file.");
+			local Height = math.max(1, tonumber(Info.Height) or 200);
+			local Holder = Library:CreateInstance("Frame", {
+				Name = Idx; Parent = self.Body; Size = UDim2.new(1, 0, 0, Height);
+				BackgroundTransparency = 1; Visible = Info.Visible ~= false;
+			});
+			local Box = Library:CreateInstance("Frame", {
+				Parent = Holder; Size = UDim2.fromScale(1, 1); BackgroundColor3 = Color3.fromHex("151515");
+				BackgroundTransparency = math.clamp(tonumber(Info.BackgroundTransparency) or 0, 0, 1);
+				BorderSizePixel = 0; ClipsDescendants = true;
+			});
+			local Stroke = Library:CreateInstance("UIStroke", { Parent = Box; Color = Color3.fromHex("252527"); Thickness = 1; });
+			Library:CreateInstance("UIPadding", {
+				Parent = Box; PaddingBottom = UDim.new(0, 4); PaddingLeft = UDim.new(0, 4);
+				PaddingRight = UDim.new(0, 4); PaddingTop = UDim.new(0, 4);
+			});
+			local ImageLabel = Library:CreateInstance("ImageLabel", {
+				Parent = Box; Size = UDim2.fromScale(1, 1); BackgroundTransparency = 1; Image = Asset;
+				ImageColor3 = typeof(Info.Color) == "Color3" and Info.Color or Color3.new(1, 1, 1);
+				ImageTransparency = math.clamp(tonumber(Info.Transparency) or 0, 0, 1);
+				ImageRectOffset = typeof(Info.RectOffset) == "Vector2" and Info.RectOffset or Vector2.zero;
+				ImageRectSize = typeof(Info.RectSize) == "Vector2" and Info.RectSize or Vector2.zero;
+				ScaleType = typeof(Info.ScaleType) == "EnumItem" and Info.ScaleType or Enum.ScaleType.Fit;
+			});
+			local Image = {
+				Type = "Image"; Image = Source; Asset = Asset; Height = Height; Visible = Info.Visible ~= false;
+				Holder = Holder; Box = Box; ImageLabel = ImageLabel; Destroyed = false;
+			};
+			function Image:SetHeight(NewHeight)
+				assert(typeof(NewHeight) == "number" and NewHeight > 0, "Height must be greater than 0.");
+				self.Height = NewHeight; Holder.Size = UDim2.new(1, 0, 0, NewHeight);
+			end;
+			function Image:SetImage(NewImage)
+				local NewAsset = ResolveMedia(NewImage, ".png");
+				assert(NewAsset, "Image must be a valid asset, URL, or local file.");
+				self.Image = NewImage; self.Asset = NewAsset; ImageLabel.Image = NewAsset;
+			end;
+			function Image:SetColor(Color)
+				assert(typeof(Color) == "Color3", "Color must be a Color3."); ImageLabel.ImageColor3 = Color;
+			end;
+			function Image:SetRectOffset(Offset)
+				assert(typeof(Offset) == "Vector2", "RectOffset must be a Vector2."); ImageLabel.ImageRectOffset = Offset;
+			end;
+			function Image:SetRectSize(Size)
+				assert(typeof(Size) == "Vector2", "RectSize must be a Vector2."); ImageLabel.ImageRectSize = Size;
+			end;
+			function Image:SetScaleType(ScaleType)
+				assert(typeof(ScaleType) == "EnumItem" and ScaleType.EnumType == Enum.ScaleType, "Invalid ScaleType."); ImageLabel.ScaleType = ScaleType;
+			end;
+			function Image:SetTransparency(Transparency)
+				assert(typeof(Transparency) == "number", "Transparency must be a number.");
+				ImageLabel.ImageTransparency = math.clamp(Transparency, 0, 1);
+			end;
+			function Image:SetBackgroundTransparency(Transparency)
+				assert(typeof(Transparency) == "number", "BackgroundTransparency must be a number.");
+				Box.BackgroundTransparency = math.clamp(Transparency, 0, 1); Stroke.Enabled = Box.BackgroundTransparency < 1;
+			end;
+			function Image:SetVisible(Visible) self.Visible = Visible == true; Holder.Visible = self.Visible end;
+			function Image:Destroy()
+				if self.Destroyed then return end;
+				self.Destroyed = true; Holder:Destroy();
+				if Library.Options[Idx] == self then Library.Options[Idx] = nil end;
+			end;
+			Library.Options[Idx] = Image;
+			return Image;
+		end;
+		Sec.AddVideo = function(self, Idx, Info)
+			Info = typeof(Info) == "table" and Info or {};
+			Idx = tostring(Idx or "Video");
+			local Source = Info.Video or "";
+			local Asset = ResolveMedia(Source, ".mp4") or "";
+			local Height = math.max(1, tonumber(Info.Height) or 200);
+			local Holder = Library:CreateInstance("Frame", {
+				Name = Idx; Parent = self.Body; Size = UDim2.new(1, 0, 0, Height);
+				BackgroundTransparency = 1; Visible = Info.Visible ~= false;
+			});
+			local Box = Library:CreateInstance("Frame", {
+				Parent = Holder; Size = UDim2.fromScale(1, 1); BackgroundColor3 = Color3.fromHex("151515");
+				BorderSizePixel = 0; ClipsDescendants = true;
+			});
+			Library:CreateInstance("UIStroke", { Parent = Box; Color = Color3.fromHex("252527"); Thickness = 1; });
+			Library:CreateInstance("UIPadding", {
+				Parent = Box; PaddingBottom = UDim.new(0, 4); PaddingLeft = UDim.new(0, 4);
+				PaddingRight = UDim.new(0, 4); PaddingTop = UDim.new(0, 4);
+			});
+			local VideoFrame = Library:CreateInstance("VideoFrame", {
+				Parent = Box; Size = UDim2.fromScale(1, 1); BackgroundTransparency = 1;
+				Video = Asset; Looped = Info.Looped == true; Volume = math.clamp(tonumber(Info.Volume) or 1, 0, 10);
+			});
+			local Video = {
+				Type = "Video"; Video = Source; Asset = Asset; Height = Height; Visible = Info.Visible ~= false;
+				Playing = Info.Playing == true; Looped = Info.Looped == true; Holder = Holder;
+				VideoFrame = VideoFrame; Destroyed = false;
+			};
+			VideoFrame.Playing = Video.Playing;
+			function Video:SetHeight(NewHeight)
+				assert(typeof(NewHeight) == "number" and NewHeight > 0, "Height must be greater than 0.");
+				self.Height = NewHeight; Holder.Size = UDim2.new(1, 0, 0, NewHeight);
+			end;
+			function Video:SetVideo(NewVideo)
+				local NewAsset = ResolveMedia(NewVideo, ".mp4");
+				assert(NewAsset, "Video must be a valid asset, URL, or local file.");
+				self.Video = NewVideo; self.Asset = NewAsset; VideoFrame.Video = NewAsset;
+			end;
+			function Video:SetLooped(Looped) self.Looped = Looped == true; VideoFrame.Looped = self.Looped end;
+			function Video:SetVolume(Volume)
+				assert(typeof(Volume) == "number", "Volume must be a number."); VideoFrame.Volume = math.clamp(Volume, 0, 10);
+			end;
+			function Video:SetPlaying(Playing) self.Playing = Playing == true; VideoFrame.Playing = self.Playing end;
+			function Video:Play() self:SetPlaying(true) end;
+			function Video:Pause() self:SetPlaying(false) end;
+			function Video:SetVisible(Visible) self.Visible = Visible == true; Holder.Visible = self.Visible end;
+			function Video:Destroy()
+				if self.Destroyed then return end;
+				self.Destroyed = true; VideoFrame.Playing = false; Holder:Destroy();
+				if Library.Options[Idx] == self then Library.Options[Idx] = nil end;
+			end;
+			Library.Options[Idx] = Video;
+			return Video;
+		end;
+		Sec.AddUIPassthrough = function(self, Idx, Info)
+			Info = typeof(Info) == "table" and Info or {};
+			Idx = tostring(Idx or "UIPassthrough");
+			assert(typeof(Info.Instance) == "Instance" and Info.Instance:IsA("GuiBase2d"), "Instance must inherit from GuiBase2d.");
+			local Height = math.max(1, tonumber(Info.Height) or 24);
+			local Holder = Library:CreateInstance("Frame", {
+				Name = Idx; Parent = self.Body; Size = UDim2.new(1, 0, 0, Height);
+				BackgroundTransparency = 1; Visible = Info.Visible ~= false;
+			});
+			Info.Instance.Parent = Holder;
+			local Passthrough = {
+				Type = "UIPassthrough"; Instance = Info.Instance; Height = Height;
+				Visible = Info.Visible ~= false; Holder = Holder; Destroyed = false;
+			};
+			function Passthrough:SetHeight(NewHeight)
+				assert(typeof(NewHeight) == "number" and NewHeight > 0, "Height must be greater than 0.");
+				self.Height = NewHeight; Holder.Size = UDim2.new(1, 0, 0, NewHeight);
+			end;
+			function Passthrough:SetInstance(NewInstance)
+				assert(typeof(NewInstance) == "Instance" and NewInstance:IsA("GuiBase2d"), "Instance must inherit from GuiBase2d.");
+				if self.Instance then self.Instance.Parent = nil end;
+				self.Instance = NewInstance; NewInstance.Parent = Holder;
+			end;
+			function Passthrough:SetVisible(Visible) self.Visible = Visible == true; Holder.Visible = self.Visible end;
+			function Passthrough:Destroy()
+				if self.Destroyed then return end;
+				self.Destroyed = true; Holder:Destroy();
+				if Library.Options[Idx] == self then Library.Options[Idx] = nil end;
+			end;
+			Library.Options[Idx] = Passthrough;
+			return Passthrough;
 		end;
 		return Sec;
 	end;
