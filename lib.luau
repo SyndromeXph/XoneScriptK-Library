@@ -8264,16 +8264,6 @@ function Library:PreviewWindow(Opts)
 		Enabled = Opts.Enabled;
 	});
 	Core.Container.Position = UDim2.new(0, 5, 0, 34);
-	local ViewportBody = self:CreateInstance("Frame", {
-		Name                   = "ViewportBody";
-		Parent                 = Outer;
-		Position               = UDim2.new(0, 5, 0, 34);
-		Size                   = UDim2.new(1, -10, 1, -39);
-		BackgroundTransparency = 1;
-		BorderSizePixel        = 0;
-		ClipsDescendants       = true;
-		Visible                = false;
-	});
 	local FadeOriginals = nil;
 	local ActiveFade = nil;
 	local function CaptureFade()
@@ -8301,28 +8291,7 @@ function Library:PreviewWindow(Opts)
 		for _, D in Outer:GetDescendants() do Cap(D) end;
 		return Map;
 	end;
-	local Obj = { Gui = Gui, Outer = Outer, Preview = Core, ViewportBody = ViewportBody, _Visible = true };
-	local ViewportControl = nil;
-	function Obj:AddViewport(Idx, Info)
-		if typeof(Idx) == "table" and Info == nil then
-			Info = Idx;
-			Idx = Info.Name or "PreviewViewport";
-		end;
-		Info = typeof(Info) == "table" and Info or {};
-		Idx = tostring(Idx or "PreviewViewport");
-		assert(Library._BuildViewportControl, "Viewport controls are not initialized.");
-		if ViewportControl then ViewportControl:Destroy(); ViewportControl = nil end;
-		local ViewportInfo = {};
-		for Key, Value in Info do ViewportInfo[Key] = Value end;
-		ViewportInfo.Height = math.max(24, tonumber(Info.Height) or (Height - 39));
-		Core.Container.Visible = false;
-		ViewportBody.Visible = true;
-		ViewportControl = Library._BuildViewportControl(ViewportBody, Idx, ViewportInfo);
-		return ViewportControl;
-	end;
-	function Obj:GetViewport()
-		return ViewportControl;
-	end;
+	local Obj = { Gui = Gui, Outer = Outer, Preview = Core, _Visible = true };
 	function Obj:SetVisible(State)
 		State = State and true or false;
 		if self._Visible == State and Gui.Enabled == State and not ActiveFade then return end;
@@ -8368,31 +8337,10 @@ function Library:PreviewWindow(Opts)
 	function Obj:Set(...) return Core:Set(...) end;
 	function Obj:Update(...) return Core:Update(...) end;
 	function Obj:SetText(...) return Core:SetText(...) end;
-	function Obj:ViewModel(...)
-		if ViewportControl then ViewportControl:Destroy(); ViewportControl = nil end;
-		ViewportBody.Visible = false;
-		Core.Container.Visible = true;
-		return Core:ViewModel(...);
-	end;
-	function Obj:Refresh(...)
-		if ViewportControl then ViewportControl:Focus(); return end;
-		return Core:Refresh(...);
-	end;
+	function Obj:ViewModel(...) return Core:ViewModel(...) end;
+	function Obj:Refresh(...) return Core:Refresh(...) end;
 	function Obj:SyncFromESP(...) return Core:SyncFromESP(...) end;
-	function Obj:Destroy()
-		if ViewportControl then ViewportControl:Destroy(); ViewportControl = nil end;
-		Gui:Destroy();
-	end;
-	if Opts.Object then
-		Obj:AddViewport(tostring(Opts.ViewportName or "PreviewViewport"), {
-			Object = Opts.Object;
-			Camera = Opts.Camera;
-			Clone = Opts.Clone;
-			Interactive = Opts.Interactive;
-			AutoFocus = Opts.AutoFocus;
-			Height = Opts.ViewportHeight;
-		});
-	end;
+	function Obj:Destroy() Gui:Destroy() end;
 	Library._PreviewWindow = Obj;
 	return Obj;
 end;
@@ -11186,12 +11134,6 @@ do
 			return Passthrough;
 		end;
 		return Sec;
-	end;
-	Library._BuildViewportControl = function(Parent, Idx, Info)
-		assert(typeof(Parent) == "Instance" and Parent:IsA("GuiObject"), "Parent must be a GuiObject.");
-		local Section = { Body = Parent };
-		EnhanceSection(Section);
-		return Section:AddViewport(Idx, Info);
 	end;
 	local function EnhanceTab(Tab)
 		if typeof(Tab) ~= "table" or Tab._ObsidianAPI then return Tab end;
