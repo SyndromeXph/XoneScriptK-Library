@@ -527,13 +527,6 @@ function SaveManager:ApplyToGroupbox(Groupbox)
             Notify(Ok and "Auto-load cleared" or ErrorMessage, 3)
         end,
     })
-    Groupbox:Button({
-        Name = "Test Notification",
-        Callback = function()
-            self.Library:Notify("Hello there", 4)
-        end,
-    })
-
     self:SetIgnoreIndexes({ "ConfigName", "SaveManager_ConfigList", "SaveManager_ConfigName", "SaveManager_JSON" })
     self:GetAutoloadConfig()
     return Groupbox
