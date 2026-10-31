@@ -1,5 +1,6 @@
 -- XoneScriptK SaveManager
 
+
 local HttpService = game:GetService("HttpService")
 
 local SaveManager = {
@@ -188,7 +189,7 @@ function SaveManager:SetLibrary(Library)
     Library.Addons.SaveManager = self
     Library.ConfigSkipFlags = Library.ConfigSkipFlags or {}
     Library.ConfigSkipFlags.__XoneScriptK = true
-    for _, Index in ipairs({ "SaveManager_ConfigList", "SaveManager_ConfigName", "SaveManager_JSON" }) do
+    for _, Index in ipairs({ "ConfigName", "SaveManager_ConfigList", "SaveManager_ConfigName", "SaveManager_JSON" }) do
         Library.ConfigSkipFlags[Index] = true
     end
 
@@ -447,98 +448,94 @@ end
 
 function SaveManager:ApplyToGroupbox(Groupbox)
     assert(self.Library, "Call SaveManager:SetLibrary(Library) first")
-    assert(typeof(Groupbox) == "table" and Groupbox.AddInput, "A XoneScriptK groupbox is required")
+    assert(typeof(Groupbox) == "table" and Groupbox.List and Groupbox.Textbox, "A XoneScriptK groupbox is required")
     if self._Mounted[Groupbox] then return Groupbox end
     self._Mounted[Groupbox] = true
 
-    local ConfigName = Groupbox:AddInput("SaveManager_ConfigName", { Text = "Config name" })
-    local ConfigList, ConfigJSON, AutoloadLabel
+    local function GetConfigNames()
+        local Names = self:RefreshConfigList()
+        if #Names == 0 then table.insert(Names, "default") end
+        return Names
+    end
+
+    local ConfigList = Groupbox:List({
+        Name = "Configs",
+        Options = GetConfigNames(),
+        Default = "default",
+        Height = 90,
+    })
+    Groupbox:Textbox({
+        Name = "Config Name",
+        Flag = "ConfigName",
+        Placeholder = "name...",
+    })
 
     local function RefreshList()
-        local Selected = ConfigList and ConfigList.Value or nil
-        local Names = self:RefreshConfigList()
-        ConfigList:SetValues(Names)
-        if Selected and table.find(Names, Selected) then
-            ConfigList:SetValue(Selected)
-        else
-            ConfigList:SetValue("")
-        end
+        ConfigList:SetOptions(GetConfigNames())
     end
 
-    local function RefreshAutoload()
-        local Name = self:GetAutoloadConfig()
-        AutoloadLabel:SetText("Current autoload config: " .. tostring(Name))
-        RefreshList()
-    end
-
-    local function SelectedConfig()
-        local Name = ConfigList.Value
-        if IsEmpty(Name) then Notify("Please select a config first") return nil end
-        return Name
-    end
-
-    Groupbox:AddButton("Create / overwrite config", function()
-        local Name = Trim(ConfigName.Value)
-        if not IsValidName(Name, "autoload") then Notify("Enter a valid config name") return end
-        local Ok, ErrorMessage = self:Save(Name)
-        Notify(Ok and string.format("Saved config %q", Name) or tostring(ErrorMessage))
-        if Ok then RefreshList() end
-    end)
-
-    Groupbox:AddDivider()
-    ConfigList = Groupbox:AddDropdown("SaveManager_ConfigList", {
-        Text = "Config list", Values = self:RefreshConfigList(), AllowNull = true, Multi = false,
+    Groupbox:Button({
+        Name = "Save",
+        Callback = function()
+            local Name = Trim(self.Library.Flags.ConfigName)
+            if Name == "" then Notify("Enter a config name first", 3) return end
+            local Ok, ErrorMessage = self:Save(Name)
+            if not Ok then Notify(ErrorMessage) return end
+            RefreshList()
+            Notify("Saved config: " .. Name, 3)
+        end,
+    }):Button({
+        Name = "Load",
+        Callback = function()
+            local Name = ConfigList:Get()
+            local Ok, ErrorMessage = self:Load(Name)
+            Notify(Ok and ("Loaded: " .. Name) or ErrorMessage, 3)
+        end,
     })
-    Groupbox:AddButton("Load config", function()
-        local Name = SelectedConfig()
-        if not Name then return end
-        local Ok, ErrorMessage = self:Load(Name)
-        Notify(Ok and string.format("Loaded config %q", Name) or tostring(ErrorMessage))
-    end)
-    Groupbox:AddButton({ Text = "Delete config", Confirm = true, Func = function()
-        local Name = SelectedConfig()
-        if not Name then return end
-        local Ok, ErrorMessage = self:Delete(Name)
-        Notify(Ok and string.format("Deleted config %q", Name) or tostring(ErrorMessage))
-        if Ok then RefreshAutoload() end
-    end })
-    Groupbox:AddButton("Refresh list", RefreshList)
 
-    Groupbox:AddDivider()
-    Groupbox:AddButton("Set as autoload", function()
-        local Name = SelectedConfig()
-        if not Name then return end
-        local Ok, ErrorMessage = self:SaveAutoloadConfig(Name)
-        Notify(Ok and string.format("Autoload set to %q", Name) or tostring(ErrorMessage))
-        if Ok then RefreshAutoload() end
-    end)
-    Groupbox:AddButton({ Text = "Reset autoload", Confirm = true, Func = function()
-        local Ok, ErrorMessage = self:DeleteAutoLoadConfig()
-        Notify(Ok and "Autoload cleared" or tostring(ErrorMessage))
-        if Ok then RefreshAutoload() end
-    end })
-    AutoloadLabel = Groupbox:AddLabel("Current autoload config: ...")
+    Groupbox:Button({
+        Name = "Delete",
+        Confirm = true,
+        Callback = function()
+            local Name = ConfigList:Get()
+            local Ok, ErrorMessage = self:Delete(Name)
+            if not Ok then Notify(ErrorMessage) return end
+            RefreshList()
+            Notify("Deleted: " .. Name, 3)
+        end,
+    }):Button({
+        Name = "Refresh",
+        Callback = function()
+            RefreshList()
+            Notify("Refreshed configs", 2)
+        end,
+    })
 
-    Groupbox:AddDivider()
-    ConfigJSON = Groupbox:AddInput("SaveManager_JSON", { Text = "Config JSON" })
-    Groupbox:AddButton({ Text = "Import config", Confirm = true, Func = function()
-        local Ok, ErrorMessage = self:LoadJSON(ConfigJSON.Value)
-        Notify(Ok and "Config imported" or tostring(ErrorMessage))
-    end })
-    Groupbox:AddButton("Export current config", function()
-        local Encoded, Ok, ErrorMessage = self:SaveJSON()
-        if not Ok then Notify(ErrorMessage) return end
-        ConfigJSON:SetValue(Encoded)
-        if type(setclipboard) == "function" then
-            pcall(setclipboard, Encoded)
-            Notify("Config exported and copied to clipboard", 3)
-        else
-            Notify("Config exported to the JSON field", 3)
-        end
-    end)
+    Groupbox:Button({
+        Name = "Set As Auto Load",
+        Callback = function()
+            local Name = ConfigList:Get()
+            local Ok, ErrorMessage = self:SaveAutoloadConfig(Name)
+            Notify(Ok and ("Auto-load: " .. Name) or ErrorMessage, 3)
+        end,
+    })
+    Groupbox:Button({
+        Name = "Remove Auto Load",
+        Confirm = true,
+        Callback = function()
+            local Ok, ErrorMessage = self:DeleteAutoLoadConfig()
+            Notify(Ok and "Auto-load cleared" or ErrorMessage, 3)
+        end,
+    })
+    Groupbox:Button({
+        Name = "Test Notification",
+        Callback = function()
+            self.Library:Notify("Hello there", 4)
+        end,
+    })
 
-    self:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName", "SaveManager_JSON" })
-    RefreshAutoload()
+    self:SetIgnoreIndexes({ "ConfigName", "SaveManager_ConfigList", "SaveManager_ConfigName", "SaveManager_JSON" })
+    self:GetAutoloadConfig()
     return Groupbox
 end
 
@@ -547,7 +544,7 @@ function SaveManager:BuildConfigSection(Tab, IconName)
     assert(typeof(Tab) == "table" and Tab.AddGroupbox, "A XoneScriptK tab is required")
     if self._Mounted[Tab] then return self._Mounted[Tab] end
     local Groupbox = Tab:AddGroupbox({
-        Side = "Right", Name = "Configuration", IconName = IconName or "folder-cog",
+        Side = "Left", Name = "Configuration", IconName = IconName or "folder-cog",
     })
     self._Mounted[Tab] = Groupbox
     self.AppliedToTab = true
