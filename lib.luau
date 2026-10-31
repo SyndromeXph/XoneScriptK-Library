@@ -177,25 +177,53 @@ function ResolveLoaderImage(Source)
         return type(D) == "string" and #D > 100
             and (string.sub(D, 1, 4) == "\137PNG" or string.sub(D, 1, 2) == "\255\216")
     end
+    local function HttpGet(Url)
+        local Ok, D = pcall(function() return game:HttpGet(Url) end)
+        if Ok and type(D) == "string" and #D > 0 then return D end
+        return nil
+    end
+    local function NestedAssetId(D)
+        if type(D) ~= "string" or ValidImage(D) then return nil end
+        return string.match(D, "rbxassetid://(%d+)")
+            or string.match(D, "roblox%.com/asset/%?id=(%d+)")
+            or string.match(D, "[?&]id=(%d+)")
+    end
+    local function FetchAsset(Id, Depth)
+        local Urls = {
+            "https://assetdelivery.roblox.com/v1/asset?id=" .. Id,
+            "https://www.roblox.com/asset?id=" .. Id,
+        }
+        for _, Url in ipairs(Urls) do
+            local D = HttpGet(Url)
+            if ValidImage(D) then return D end
+            local Nested = NestedAssetId(D)
+            if Depth > 0 and Nested and Nested ~= Id then
+                local ImageData = FetchAsset(Nested, Depth - 1)
+                if ImageData then return ImageData end
+            end
+        end
+        return nil
+    end
     if Source == nil then Source = Library._CustomLogo or Library.DefaultLogo end
     if typeof(Source) == "number" then Source = "rbxassetid://" .. tostring(Source) end
     if typeof(Source) ~= "string" then return nil end
+    Library._LoaderImageCache = Library._LoaderImageCache or {}
+    local Cached = Library._LoaderImageCache[Source]
+    if ValidImage(Cached) then return Cached end
     local Id = string.match(Source, "^rbxassetid://(%d+)$")
+        or string.match(Source, "^rbxthumb://.*[?&]id=(%d+)")
+    local D
     if Id then
-        local Ok, D = pcall(function()
-            return game:HttpGet("https://assetdelivery.roblox.com/v1/asset?id=" .. Id)
-        end)
-        if Ok and ValidImage(D) then return D end
-        return nil
+        D = FetchAsset(Id, 2)
+    elseif string.match(Source, "^https?://") then
+        D = HttpGet(Source)
+    elseif isfile and isfile(Source) then
+        local Ok, FileData = pcall(readfile, Source)
+        if Ok then D = FileData end
     end
-    if string.match(Source, "^https?://") then
-        local Ok, D = pcall(function() return game:HttpGet(Source) end)
-        if Ok and ValidImage(D) then return D end
-        return nil
-    end
-    if isfile and isfile(Source) then
-        local Ok, D = pcall(readfile, Source)
-        if Ok and ValidImage(D) then return D end
+    if ValidImage(D) then
+        Library._LoaderImageCache[Source] = D
+        return D
     end
     return nil
 end
@@ -279,15 +307,13 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
     table.insert(Drawings, SliderTip)
     local MiddleIcon = Drawing.new("Image");
     MiddleIcon.Size = Vector2.new(185, 185);
-    MiddleIcon.Rounding = 5;
+    pcall(function() MiddleIcon.Rounding = 5 end);
     MiddleIcon.Transparency = 1;
     MiddleIcon.Visible = false;
     local LogoData = ResolveLoaderImage(LogoSrc);
+    local LogoReady = false;
     if LogoData then
-        MiddleIcon.Data = LogoData;
-        MiddleIcon.Visible = true;
-    else
-        MiddleIcon.Visible = false;
+        LogoReady = pcall(function() MiddleIcon.Data = LogoData end);
     end
     table.insert(Drawings, MiddleIcon);
     SliderInline.Position = Vector2.new(
@@ -316,7 +342,7 @@ function BuildDrawingLoader(Title, WindowSize, LogoSrc)
         D.Visible = false
         D.Transparency = 0
     end
-    FadeVisible[MiddleIcon] = LogoData ~= nil
+    FadeVisible[MiddleIcon] = LogoReady
     FadeVisible[SliderTip] = false
     local RS = game:GetService("RunService")
     local function Fade(From, To, Duration)
