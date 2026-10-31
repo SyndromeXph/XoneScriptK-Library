@@ -771,6 +771,7 @@ function Library:Draggable(TargetFrame, DragHandle, IgnoreLock)
 		);
 	end;
 	self:Connection(Handle.InputBegan, function(Input)
+		if TargetFrame:GetAttribute("DraggingDisabled") then return end;
 		if Library.CantDragForced and not IgnoreLock then return end;
 		if not IgnoreLock and Library.CanDrag == false then return end;
 		if
@@ -808,6 +809,10 @@ function Library:Draggable(TargetFrame, DragHandle, IgnoreLock)
 		Dirty     = true;
 	end);
 	self:Connection(RunService.RenderStepped, function()
+		if TargetFrame:GetAttribute("DraggingDisabled") then
+			if Dragging then Dragging = false; Library.IsDragging = false; SetShadows(true) end;
+			return;
+		end;
 		if not Dragging or not Dirty or not LastInput then return end;
 		if not IgnoreLock and Library.CanDrag == false then
 			SetShadows(true);
@@ -6914,8 +6919,12 @@ function Library:KeybindList(Opts)
 	return Obj;
 end;
 function Library:Watermark(Opts)
+	if typeof(Opts) == "string" or typeof(Opts) == "number" then Opts = { Text = tostring(Opts) } end;
 	Opts = typeof(Opts) == "table" and Opts or {};
 	local Text = tostring(Opts.Text or Opts.Title or "XoneScriptK");
+	local Height = math.clamp(tonumber(Opts.Height) or 24, 20, 200);
+	local Position = typeof(Opts.Position) == "UDim2" and Opts.Position or UDim2.fromOffset(10, 110);
+	local AnchorPoint = typeof(Opts.AnchorPoint) == "Vector2" and Opts.AnchorPoint or Vector2.zero;
 	local Gui = self:CreateInstance("ScreenGui", {
 		Name = "Watermark";
 		Parent = (gethui and gethui()) or CoreGui;
@@ -6926,124 +6935,177 @@ function Library:Watermark(Opts)
 	local Frame = self:CreateInstance("Frame", {
 		Name             = "Watermark";
 		Parent           = Gui;
-		AnchorPoint      = Vector2.new(0, 0);
-		Position         = UDim2.fromOffset(10, 110);
-		Size             = UDim2.new(0, 0, 0, 24);
+		AnchorPoint      = AnchorPoint;
+		Position         = Position;
+		Size             = UDim2.new(0, 0, 0, Height);
 		AutomaticSize    = Enum.AutomaticSize.X;
 		BackgroundColor3 = Color3.fromHex("000000");
 		BorderSizePixel  = 0;
 	});
 	self:CreateInstance("UIPadding", {
-		Parent        = Frame;
-		PaddingLeft   = UDim.new(0, 1);
-		PaddingRight  = UDim.new(0, 1);
-		PaddingTop    = UDim.new(0, 1);
-		PaddingBottom = UDim.new(0, 1);
+		Parent = Frame; PaddingLeft = UDim.new(0, 1); PaddingRight = UDim.new(0, 1);
+		PaddingTop = UDim.new(0, 1); PaddingBottom = UDim.new(0, 1);
 	});
 	local Gray = self:CreateInstance("Frame", {
-		Name             = "Gray";
-		Parent           = Frame;
-		Size             = UDim2.new(0, 0, 1, 0);
-		AutomaticSize    = Enum.AutomaticSize.X;
-		BackgroundColor3 = Color3.fromHex("393939");
-		BorderSizePixel  = 0;
+		Name = "Gray"; Parent = Frame; Size = UDim2.new(0, 0, 1, 0);
+		AutomaticSize = Enum.AutomaticSize.X; BackgroundColor3 = Color3.fromHex("393939"); BorderSizePixel = 0;
 	});
 	self:CreateInstance("UIPadding", {
-		Parent        = Gray;
-		PaddingLeft   = UDim.new(0, 1);
-		PaddingRight  = UDim.new(0, 1);
-		PaddingTop    = UDim.new(0, 1);
-		PaddingBottom = UDim.new(0, 1);
+		Parent = Gray; PaddingLeft = UDim.new(0, 1); PaddingRight = UDim.new(0, 1);
+		PaddingTop = UDim.new(0, 1); PaddingBottom = UDim.new(0, 1);
 	});
 	local GradRing = self:CreateInstance("Frame", {
-		Name             = "GradientRing";
-		Parent           = Gray;
-		Size             = UDim2.new(0, 0, 1, 0);
-		AutomaticSize    = Enum.AutomaticSize.X;
-		BackgroundColor3 = Color3.fromHex("FFFFFF");
-		BorderSizePixel  = 0;
+		Name = "GradientRing"; Parent = Gray; Size = UDim2.new(0, 0, 1, 0);
+		AutomaticSize = Enum.AutomaticSize.X; BackgroundColor3 = Color3.fromHex("FFFFFF"); BorderSizePixel = 0;
 	});
-	local RingGradient = self:CreateInstance("UIGradient", {
-		Parent   = GradRing;
-		Rotation = 0;
-	});
+	local RingGradient = self:CreateInstance("UIGradient", { Parent = GradRing; Rotation = 0 });
 	Library:RegisterAccentGradient(RingGradient);
 	self:CreateInstance("UIPadding", {
-		Parent        = GradRing;
-		PaddingLeft   = UDim.new(0, 1);
-		PaddingRight  = UDim.new(0, 1);
-		PaddingTop    = UDim.new(0, 1);
-		PaddingBottom = UDim.new(0, 1);
+		Parent = GradRing; PaddingLeft = UDim.new(0, 1); PaddingRight = UDim.new(0, 1);
+		PaddingTop = UDim.new(0, 1); PaddingBottom = UDim.new(0, 1);
 	});
 	local Inside = self:CreateInstance("Frame", {
-		Name             = "Inside";
-		Parent           = GradRing;
-		Size             = UDim2.new(0, 0, 1, 0);
-		AutomaticSize    = Enum.AutomaticSize.X;
-		BackgroundColor3 = Color3.fromHex("FFFFFF");
-		BorderSizePixel  = 0;
+		Name = "Inside"; Parent = GradRing; Size = UDim2.new(0, 0, 1, 0);
+		AutomaticSize = Enum.AutomaticSize.X; BackgroundColor3 = Color3.fromHex("FFFFFF"); BorderSizePixel = 0;
 	});
 	self:CreateInstance("UIGradient", {
-		Parent   = Inside;
-		Rotation = 90;
-		Color    = NewColorSequence({
+		Parent = Inside; Rotation = 90; Color = NewColorSequence({
 			NewColorSequenceKeypoint(0, Color3.fromHex("1F1F1F"));
 			NewColorSequenceKeypoint(1, Color3.fromHex("181818"));
 		});
 	});
-	self:CreateInstance("UIPadding", {
-		Parent       = Inside;
-		PaddingLeft  = UDim.new(0, 8);
-		PaddingRight = UDim.new(0, 10);
+	local InsidePadding = self:CreateInstance("UIPadding", {
+		Parent = Inside; PaddingLeft = UDim.new(0, 8); PaddingRight = UDim.new(0, 8);
 	});
-local Logo = self:CreateInstance("ImageLabel", {
-	Name = "Logo";
-	Parent = Inside;
-	Size = UDim2.fromOffset(24, 24);
-	AnchorPoint = Vector2.new(0, 0.3);
-	Position = UDim2.new(0, -7, 0.32, 0);
-	BackgroundTransparency = 1;
-});
-	local WmLogoOpt = Opts.Logo;
-	if WmLogoOpt == nil then WmLogoOpt = Opts.Icon end;
-	if WmLogoOpt == nil then WmLogoOpt = self._CustomLogo end;
-	local WmHideLogo = (WmLogoOpt == false);
-	if not WmHideLogo then
-		local WmLogoAsset = self._ResolveLogo and self:_ResolveLogo(WmLogoOpt) or nil;
-		if WmLogoAsset then
-			Logo.Image = WmLogoAsset;
-			table.insert(self._LogoInstances or {}, Logo);
-		else
-			WmHideLogo = true;
-		end;
-	end;
-	Logo.Visible = not WmHideLogo;
+	self:CreateInstance("UIListLayout", {
+		Parent = Inside; FillDirection = Enum.FillDirection.Horizontal; SortOrder = Enum.SortOrder.LayoutOrder;
+		VerticalAlignment = Enum.VerticalAlignment.Center; Padding = UDim.new(0, 6);
+	});
+	local Logo = self:CreateInstance("ImageLabel", {
+		Name = "Logo"; Parent = Inside; Size = UDim2.fromOffset(16, 16);
+		BackgroundTransparency = 1; Visible = false; LayoutOrder = 1;
+	});
 	local Lbl = self:CreateInstance("TextLabel", {
-		Name                   = "Label";
-		Parent                 = Inside;
-		AnchorPoint            = Vector2.new(0, 0.5);
-		Position               = UDim2.new(0, 22, 0.5, 0);
-		Size                   = UDim2.new(0, 0, 1, 0);
-		AutomaticSize          = Enum.AutomaticSize.X;
-		BackgroundTransparency = 1;
-		Text                   = Text;
-		TextColor3             = Color3.fromHex("FFFFFF");
-		TextSize               = 12;
-		TextXAlignment         = Enum.TextXAlignment.Left;
-		TextYAlignment         = Enum.TextYAlignment.Center;
+		Name = "Label"; Parent = Inside; Size = UDim2.new(0, 0, 1, 0);
+		AutomaticSize = Enum.AutomaticSize.X; BackgroundTransparency = 1; Text = Text;
+		TextColor3 = typeof(Opts.TextColor) == "Color3" and Opts.TextColor or Color3.fromHex("FFFFFF");
+		TextSize = 12; TextXAlignment = Enum.TextXAlignment.Left; TextYAlignment = Enum.TextYAlignment.Center;
+		LayoutOrder = 2;
 	});
 	if ProggyCleanFont then Lbl.FontFace = ProggyCleanFont end;
-	if WmHideLogo then Lbl.Position = UDim2.new(0, 0, 0.5, 0) end;
+	if Opts._RegisterWatermark ~= false then
+		self._LogoInstances = self._LogoInstances or {};
+		table.insert(self._LogoInstances, Logo);
+	end;
 	self:Draggable(Frame);
-	local Obj = { Gui = Gui, Frame = Frame, Label = Lbl };
-	function Obj:SetText(NewText)
-		Lbl.Text = tostring(NewText);
+	local Obj = {
+		Gui = Gui; Frame = Frame; Label = Lbl; IconImage = Logo;
+		Visible = Opts.Visible ~= false; Destroyed = false;
+		_AutoUpdate = Opts.AutoUpdate ~= false; RefreshRate = tonumber(Opts.RefreshRate);
+	};
+	function Obj:SetText(NewText) Lbl.Text = tostring(NewText or "") end;
+	function Obj:GetText() return Lbl.Text end;
+	function Obj:SetVisible(State)
+		self.Visible = State == true;
+		Gui.Enabled = self.Visible;
+	end;
+	function Obj:GetVisible() return self.Visible end;
+	function Obj:Toggle() self:SetVisible(not self.Visible) end;
+	function Obj:SetPosition(NewPosition)
+		if typeof(NewPosition) == "Vector2" then NewPosition = UDim2.fromOffset(NewPosition.X, NewPosition.Y) end;
+		assert(typeof(NewPosition) == "UDim2", "Position must be a UDim2 or Vector2.");
+		Frame.Position = NewPosition;
+	end;
+	function Obj:GetPosition() return Frame.Position end;
+	function Obj:SetAnchorPoint(NewAnchor)
+		assert(typeof(NewAnchor) == "Vector2", "AnchorPoint must be a Vector2.");
+		Frame.AnchorPoint = NewAnchor;
+	end;
+	function Obj:SetIcon(NewIcon)
+		self.Icon = NewIcon;
+		local Asset = (NewIcon ~= nil and NewIcon ~= false) and Library._ResolveLogo and Library:_ResolveLogo(NewIcon) or nil;
+		Logo.Visible = Asset ~= nil;
+		if Asset then Logo.Image = Asset end;
+		return Asset ~= nil;
+	end;
+	function Obj:SetIconPosition(NewPosition)
+		NewPosition = string.lower(tostring(NewPosition or "left"));
+		assert(NewPosition == "left" or NewPosition == "right", "IconPosition must be 'left' or 'right'.");
+		Logo.LayoutOrder = NewPosition == "left" and 1 or 2;
+		Lbl.LayoutOrder = NewPosition == "left" and 2 or 1;
+	end;
+	function Obj:SetIconSize(NewSize)
+		assert(typeof(NewSize) == "number" and NewSize > 0, "Icon size must be greater than 0.");
+		Logo.Size = UDim2.fromOffset(NewSize, NewSize);
+	end;
+	function Obj:SetIconColor(Color)
+		assert(typeof(Color) == "Color3", "Icon color must be a Color3.");
+		Logo.ImageColor3 = Color;
+	end;
+	function Obj:SetTextColor(Color)
+		assert(typeof(Color) == "Color3", "Text color must be a Color3.");
+		Lbl.TextColor3 = Color;
+	end;
+	function Obj:SetHeight(NewHeight)
+		assert(typeof(NewHeight) == "number", "Height must be a number.");
+		Frame.Size = UDim2.new(0, 0, 0, math.clamp(NewHeight, 20, 200));
+	end;
+	function Obj:SetPadding(Left, Right)
+		Left = math.max(0, tonumber(Left) or 8);
+		Right = math.max(0, tonumber(Right) or Left);
+		InsidePadding.PaddingLeft = UDim.new(0, Left);
+		InsidePadding.PaddingRight = UDim.new(0, Right);
+	end;
+	function Obj:SetDraggable(Enabled) Frame:SetAttribute("DraggingDisabled", Enabled == false) end;
+	function Obj:SetAutoUpdate(Enabled) self._AutoUpdate = Enabled == true end;
+	function Obj:SetRefreshRate(Rate)
+		assert(typeof(Rate) == "number" and Rate >= 0, "Refresh rate must be a non-negative number.");
+		self.RefreshRate = Rate;
 	end;
 	function Obj:Destroy()
+		if self.Destroyed then return end;
+		self.Destroyed = true;
 		Gui:Destroy();
+		local LogoIndex = table.find(Library._LogoInstances or {}, Logo);
+		if LogoIndex then table.remove(Library._LogoInstances, LogoIndex) end;
+		if Library._Watermark == self then Library._Watermark = nil end;
 	end;
-	Library._Watermark = Obj;
+	Obj.SetLogo = Obj.SetIcon;
+	Obj.SetEnabled = Obj.SetVisible;
+	Obj:SetIconSize(tonumber(Opts.IconSize) or 16);
+	Obj:SetIconPosition(Opts.IconPosition or "left");
+	Obj:SetPadding(Opts.PaddingLeft or Opts.Padding, Opts.PaddingRight or Opts.Padding);
+	local InitialIcon = Opts.Logo;
+	if InitialIcon == nil then InitialIcon = Opts.Icon end;
+	if InitialIcon == nil then InitialIcon = self._CustomLogo end;
+	Obj:SetIcon(InitialIcon);
+	Obj:SetDraggable(Opts.Draggable ~= false);
+	Obj:SetVisible(Opts.Visible ~= false);
+	if Opts._RegisterWatermark ~= false then Library._Watermark = Obj end;
 	return Obj;
+end;
+function Library:AddWatermark(Opts) return self:Watermark(Opts) end;
+function Library:AddDraggableLabel(Opts, Icon, IconPosition)
+	local Info = {};
+	if typeof(Opts) == "table" then
+		for K, V in pairs(Opts) do Info[K] = V end;
+	else
+		Info.Text = tostring(Opts or "");
+		Info.Icon = Icon;
+		Info.IconPosition = IconPosition;
+	end;
+	Info.Position = Info.Position or UDim2.fromOffset(6, 6);
+	Info.AutoUpdate = false;
+	Info._RegisterWatermark = false;
+	if Info.Icon == nil and Info.Logo == nil then Info.Logo = false end;
+	return self:Watermark(Info);
+end;
+function Library:SetWatermark(Text)
+	if not self._Watermark then self:Watermark({ Text = Text, AutoUpdate = false }) return end;
+	self._Watermark:SetText(Text);
+end;
+function Library:SetWatermarkVisibility(Visible)
+	if self._Watermark then self._Watermark:SetVisible(Visible) end;
 end;
 Library._NotifyPosition = "TopRight";
 function Library:_ApplyNotifyPosition()
@@ -7796,7 +7858,7 @@ ApplySettingsContents = function(self)
 		local SecHud = self:Section({ Name = "HUD", Side = "Right" });
 		local WatermarkToggle = SecHud:Toggle({
 			Name     = "Watermark", Default = true;
-			Callback = function(S) if Library._Watermark then Library._Watermark.Gui.Enabled = S end end;
+			Callback = function(S) if Library._Watermark then Library._Watermark:SetVisible(S) end end;
 		});
 		SecHud:Dropdown({
 			Name    = "Watermark Options";
@@ -7828,8 +7890,8 @@ ApplySettingsContents = function(self)
 			local Acc = 0;
 			Library:Connection(RunService.Heartbeat, function(Dt)
 				local W = Library._Watermark;
-				if not (W and W.Gui and W.Gui.Enabled) then return end;
-				local Rate = Library.Flags.WatermarkRate or 0.1;
+				if not (W and W.Gui and W.Gui.Enabled) or W._AutoUpdate == false then return end;
+				local Rate = tonumber(W.RefreshRate) or Library.Flags.WatermarkRate or 0.1;
 				Acc = Acc + Dt;
 				if Acc < Rate then return end;
 				Acc = 0;
