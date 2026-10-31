@@ -1,13 +1,17 @@
---============================================================
--- XoneScriptK Example (requires lib.luau)
--- AddToggle/AddSlider/AddDropdown..., Library.Toggles / Library.Options global access.
---============================================================
 
--- Optional: force mobile mode manually (must be before loadstring):
 -- getgenv().CoincideMobile = true
 -- getgenv().CoincideMobile = false
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/SyndromeXph/XoneScriptK-Library/refs/heads/main/lib.luau"))()
+local Repository = "https://raw.githubusercontent.com/SyndromeXph/XoneScriptK-Library/refs/heads/main/"
+local Library = loadstring(game:HttpGet(Repository .. "lib.luau"))()
+local SaveManager = loadstring(game:HttpGet(Repository .. "addons/SaveManager.lua"))()
+local ThemeManager = loadstring(game:HttpGet(Repository .. "addons/ThemeManager.lua"))()
+
+SaveManager:SetLibrary(Library)
+ThemeManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+-- Optional: isolate configs for the current game.
+-- SaveManager:SetSubFolder(tostring(game.PlaceId))
 
 local Loading = Library:CreateLoading({
     Title = "XoneScriptK",
@@ -40,7 +44,7 @@ local Options = Library.Options
 
 -- Library:SetLogo("rbxassetid://1234567890")
 -- Library:SetLogo("https://example.com/logo.png")
--- Library:SetLogo("Hydrogen/mylogo.png")
+-- Library:SetLogo("XoneScriptK/mylogo.png")
 -- Library:SetLogo(false)
 
 local Watermark = Library:Watermark({
@@ -71,8 +75,15 @@ PlayerList:PositionBelow(Preview);
 PlayerList:SyncWithWindow(Window);
 
 local KeybindList = Library:KeybindList({
-    Title = "Keybinds"
+    Title = "Keybinds",
+    Width = 220,
+    VisibilityControl = true,
+    ShowToggleState = true
 });
+-- Toggle rows can be clicked directly in the Keybinds panel.
+-- KeybindList:ToggleCollapsed()
+-- KeybindList:ToggleSettings()
+-- Options.ToggleKeyPicker:SetMenuVisibility(false)
 
 local Tabs = {
     Legit    = Window:AddTab("legit"),
@@ -80,6 +91,7 @@ local Tabs = {
     Players  = Window:AddTab("players"),
     Visuals  = Window:AddTab("visuals"),
     Misc     = Window:AddTab("misc"),
+    Media    = Window:AddTab("Media"),
     Settings = Window:AddTab("Settings")
 };
 
@@ -404,17 +416,100 @@ TOther:AddSlider("TabboxSlider", {
 MiscBox:AddLabel("Loading animation (Library:CreateLoading)\nExample is at the top of the script, enabled by default.", true);
 
 --============================================================
+-- Media tab: Viewport, Image, Video, and custom GUI passthrough
+--============================================================
+local MediaBox = Tabs.Media:AddLeftGroupbox("Media")
+
+local DemoModel = Instance.new("Part")
+DemoModel.Name = "ViewportDemo"
+DemoModel.Shape = Enum.PartType.Ball
+DemoModel.Size = Vector3.new(2, 2, 2)
+DemoModel.Color = Color3.fromRGB(128, 128, 128)
+DemoModel.Material = Enum.Material.Neon
+
+MediaBox:AddViewport("DemoViewport", {
+    Object = DemoModel,
+    Height = 180,
+    Interactive = true,
+    Clone = true,
+    AutoFocus = true
+})
+
+MediaBox:AddImage("DemoImage", {
+    Image = "rbxassetid://136469174415866",
+    Height = 100,
+    ScaleType = Enum.ScaleType.Fit,
+    BackgroundTransparency = 1
+})
+
+local PlaybackBox = Tabs.Media:AddRightGroupbox("Playback")
+
+local DemoVideo = PlaybackBox:AddVideo("DemoVideo", {
+    Height = 140,
+    Looped = true,
+    Playing = false,
+    Volume = 1
+})
+-- Set a valid video asset before calling DemoVideo:Play().
+-- DemoVideo:SetVideo("rbxassetid://1234567890")
+
+local CustomLabel = Instance.new("TextLabel")
+CustomLabel.Size = UDim2.fromScale(1, 1)
+CustomLabel.Active = true
+CustomLabel.BackgroundColor3 = Color3.fromRGB(21, 21, 21)
+CustomLabel.BorderSizePixel = 0
+CustomLabel.Text = "Custom GUI embedded with AddUIPassthrough"
+CustomLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+CustomLabel.TextSize = 12
+CustomLabel.Font = Enum.Font.Code
+
+PlaybackBox:AddUIPassthrough("CustomLabel", {
+    Instance = CustomLabel,
+    Height = 42
+})
+
+-- Right-click or long-press the custom label to open this context menu.
+local CustomMenu = Library:AddContextMenu(CustomLabel, UDim2.fromOffset(190, 0), function()
+    return { 0, CustomLabel.AbsoluteSize.Y + 4 }
+end, 1)
+
+CustomMenu:AddLabel("Custom GUI Actions")
+CustomMenu:AddButton({
+    Text = "Change Text",
+    KeepOpen = true,
+    Func = function()
+        CustomLabel.Text = "Text changed by the context menu"
+    end
+})
+CustomMenu:AddDivider()
+CustomMenu:AddButton("Reset Text", function()
+    CustomLabel.Text = "Custom GUI embedded with AddUIPassthrough"
+end)
+CustomMenu:Bind()
+
+Library:OnUnload(function()
+    DemoModel:Destroy()
+end)
+
+--============================================================
 -- Settings tab
 --============================================================
-Tabs.Settings:ApplySettings();
+-- Menu and HUD come from the library; Configuration and Themes come from Addons.
+Tabs.Settings:ApplySettings()
+ThemeManager:ApplyToTab(Tabs.Settings)
+SaveManager:ApplyToTab(Tabs.Settings)
 
-local CustomBox = Tabs.Settings:AddLeftGroupbox("My Section");
+local CustomBox = Tabs.Settings:AddLeftGroupbox("My Section")
+CustomBox:AddButton("Test Notification", function()
+    Library:Notify("Hello there", 4)
+end)
+
 CustomBox:AddButton({
     Text = "My Button",
     Func = function()
         print("custom settings button")
     end
-});
+})
 
 CustomBox:AddButton({
     Text = "Unload UI",
@@ -422,23 +517,33 @@ CustomBox:AddButton({
     Func = function()
         Library:Unload()
     end
-});
+})
 
--- Settings contents are accessible via Tabs.Settings.SettingsControls:
---   local C = Tabs.Settings.SettingsControls
---   C.SaveConfig("pvp") / C.LoadConfig("pvp") / C.DeleteConfig("pvp")
---   C.SetAutoLoad("pvp") / C.ClearAutoLoad() / C.RefreshConfigs()
---   C.SaveTheme("blue") / C.LoadTheme("blue") / C.DeleteTheme("blue") / C.RefreshThemes()
---   C.UIScale:Set(130)
---   C.LiteAnimations:Set(true)
---   C.Accent:Set(Color3.fromRGB(0, 170, 255))
---   C.Watermark:Set(false)
---   C.MenuKeybind:SetKey(Enum.KeyCode.Insert)
---   C.Unload()
---   C.Sections.Menu
+-- Menu and HUD controls are accessible through SettingsControls:
+-- local C = Tabs.Settings.SettingsControls
+-- C.UIScale:Set(130)
+-- C.LiteAnimations:Set(true)
+-- C.Watermark:Set(false)
+-- C.MenuKeybind:SetKey(Enum.KeyCode.Insert)
+-- C.Sections.Menu / C.Sections.HUD
+-- C.Unload()
 
---   Library:OnUnload(function()
---       -- stop loops / clear ESP / restore properties...
---   end)
+-- Configuration and theme APIs are provided by the Addons:
+-- SaveManager:Save("pvp") / SaveManager:Load("pvp") / SaveManager:Delete("pvp")
+-- SaveManager:SaveAutoloadConfig("pvp") / SaveManager:DeleteAutoLoadConfig()
+-- local JSON, Success = SaveManager:SaveJSON()
+-- SaveManager:LoadJSON(JSON)
+-- ThemeManager:ApplyTheme("Nord") / ThemeManager:SaveCustomTheme("MyTheme")
+-- ThemeManager:SaveDefault("Nord") / ThemeManager:DeleteDefaultTheme()
+-- local ThemeJSON, ThemeSuccess = ThemeManager:SaveJSON()
+-- ThemeManager:LoadJSON(ThemeJSON)
+-- ThemeManager:SetDefaultTheme({ Accent = Color3.fromHex("808080") }) -- before ApplyToTab
+
+-- Load autoload after every control and Addon has been created.
+SaveManager:LoadAutoloadConfig()
+
+-- Library:OnUnload(function()
+--     Stop loops, clear ESP, and restore modified properties here.
+-- end)
 
 Library:Notify({ Title = "XoneScriptK", Description = "Loaded!", Time = 2 });
