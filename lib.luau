@@ -4658,7 +4658,7 @@ end;
 		Library:OnAccent(RefreshColors);
 		local PopupIn  = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out);
 		local PopupOut = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In);
-		local PopupGap = 2;
+		local PopupGap = -1;
 		local ActiveTween = nil;
 		local function AnchorXY()
 			local AbsPos  = Box.AbsolutePosition;
