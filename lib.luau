@@ -866,6 +866,208 @@ function Library:ClampPopupXY(Popup, X, Y)
 	Y = math.clamp(Y, 4, math.max(Vp.Y - 60, 4));
 	return X, Y;
 end;
+local CurrentContextMenu = nil;
+local function CloseContextMenus(Until)
+	local Closed = {};
+	while CurrentContextMenu and CurrentContextMenu ~= Until and not Closed[CurrentContextMenu] do
+		local Menu = CurrentContextMenu;
+		Closed[Menu] = true;
+		Menu:Close();
+	end;
+end;
+local function GetContextMenuRoot()
+	if Library._ContextMenuRoot and Library._ContextMenuRoot.Parent then return Library._ContextMenuRoot end;
+	Library._ContextMenuRoot = Library:CreateInstance("ScreenGui", {
+		Name = "XoneScriptKContextMenus"; Parent = (gethui and gethui()) or CoreGui;
+		IgnoreGuiInset = true; ResetOnSpawn = false; DisplayOrder = 10000;
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
+	});
+	return Library._ContextMenuRoot;
+end;
+local function IsInsideContextArea(Inst, Position)
+	if not Inst or not Inst.Parent then return false end;
+	local P, S = Inst.AbsolutePosition, Inst.AbsoluteSize;
+	return Position.X >= P.X and Position.X <= P.X + S.X and Position.Y >= P.Y and Position.Y <= P.Y + S.Y;
+end;
+function Library:AddContextMenu(Holder, Size, Offset, List, ActiveCallback)
+	assert(typeof(Holder) == "Instance" and Holder:IsA("GuiObject"), "Holder must be a GuiObject.");
+	local Root = GetContextMenuRoot();
+	local Menu = Library:CreateInstance("CanvasGroup", {
+		Name = "ContextMenu"; Parent = Root; Size = UDim2.fromOffset(180, 0);
+		BackgroundColor3 = Color3.fromHex("151515"); BorderSizePixel = 0;
+		Visible = false; GroupTransparency = 1; ClipsDescendants = true; ZIndex = 1000;
+	});
+	Library:CreateInstance("UIStroke", { Parent = Menu; Color = Color3.fromHex("393939"); Thickness = 1; });
+	local Padding = Library:CreateInstance("UIPadding", {
+		Parent = Menu; PaddingBottom = UDim.new(0, 6); PaddingLeft = UDim.new(0, 6);
+		PaddingRight = UDim.new(0, 6); PaddingTop = UDim.new(0, 6);
+	});
+	local Layout = Library:CreateInstance("UIListLayout", {
+		Parent = Menu; FillDirection = Enum.FillDirection.Vertical;
+		SortOrder = Enum.SortOrder.LayoutOrder; Padding = UDim.new(0, 4);
+	});
+	local Table = {
+		Holder = Holder; Menu = Menu; List = Layout; Size = Size or UDim2.fromOffset(180, 0);
+		AutoSizeY = List == 1 or List == nil; Active = false; ActiveCallback = ActiveCallback;
+		Connections = {}; Destroyed = false; ParentMenu = nil; _AnimationToken = 0;
+	};
+	local function Track(Signal, Fn)
+		local Conn = Library:Connection(Signal, Fn);
+		table.insert(Table.Connections, Conn);
+		return Conn;
+	end;
+	local function ResolveSize()
+		local Value = typeof(Table.Size) == "function" and Table.Size() or Table.Size;
+		if typeof(Value) ~= "UDim2" then Value = UDim2.fromOffset(180, 0) end;
+		local Height = Value.Y.Offset;
+		if Table.AutoSizeY or Height <= 0 then Height = Layout.AbsoluteContentSize.Y + 12 end;
+		return UDim2.new(Value.X.Scale, Value.X.Offset, Value.Y.Scale, math.max(Height, 12));
+	end;
+	local function ResolveOffset()
+		local Value = typeof(Offset) == "function" and Offset() or Offset;
+		if typeof(Value) == "Vector2" then return Value.X, Value.Y end;
+		if typeof(Value) == "table" then return tonumber(Value[1]) or 0, tonumber(Value[2]) or 0 end;
+		return 0, Holder.AbsoluteSize.Y + 4;
+	end;
+	local function UpdatePosition()
+		if not Holder.Parent then Table:Close(); return end;
+		local OX, OY = ResolveOffset();
+		local X = Holder.AbsolutePosition.X + OX;
+		local Y = Holder.AbsolutePosition.Y + OY;
+		X, Y = Library:ClampPopupXY(Menu, X, Y);
+		Table._Position = UDim2.fromOffset(math.floor(X), math.floor(Y));
+		Menu.Position = Table._Position;
+	end;
+	function Table:Open()
+		if self.Destroyed or not Holder.Parent then return end;
+		if self.Active then Menu.Size = ResolveSize(); UpdatePosition(); return end;
+		local NestedParent = nil;
+		local Check = CurrentContextMenu;
+		while Check do
+			if Holder:IsDescendantOf(Check.Menu) then NestedParent = Check; break end;
+			Check = Check.ParentMenu;
+		end;
+		CloseContextMenus(NestedParent);
+		self.ParentMenu = NestedParent; CurrentContextMenu = self; self.Active = true;
+		Menu.ZIndex = NestedParent and NestedParent.Menu.ZIndex + 1 or 1000;
+		Menu.Parent = Root;
+		local TargetSize = ResolveSize(); Menu.Size = TargetSize; UpdatePosition();
+		self._AnimationToken += 1;
+		local Mine = self._AnimationToken;
+		if typeof(self.ActiveCallback) == "function" then pcall(self.ActiveCallback, true) end;
+		if Library._ReduceAnimations then
+			Menu.Position = self._Position; Menu.GroupTransparency = 0; Menu.Visible = true; return;
+		end;
+		local StartHeight = Menu.Visible and Menu.Size.Y.Offset or 0;
+		Menu.Size = UDim2.new(TargetSize.X.Scale, TargetSize.X.Offset, 0, StartHeight);
+		Menu.Position = self._Position + UDim2.fromOffset(0, 6);
+		Menu.Visible = true;
+		Library:Tween(Menu, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			GroupTransparency = 0; Position = self._Position; Size = TargetSize;
+		}):Play();
+	end;
+	function Table:Close()
+		if not self.Active then return end;
+		self.Active = false;
+		if CurrentContextMenu == self then CurrentContextMenu = self.ParentMenu end;
+		self.ParentMenu = nil;
+		if typeof(self.ActiveCallback) == "function" then pcall(self.ActiveCallback, false) end;
+		self._AnimationToken += 1;
+		local Mine = self._AnimationToken;
+		if Library._ReduceAnimations then Menu.Visible = false; Menu.GroupTransparency = 1; return end;
+		local CurrentSize = Menu.Size;
+		Library:Tween(Menu, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			GroupTransparency = 1; Position = self._Position + UDim2.fromOffset(0, 6);
+			Size = UDim2.new(CurrentSize.X.Scale, CurrentSize.X.Offset, 0, 0);
+		}):Play();
+		task.delay(0.15, function()
+			if self._AnimationToken == Mine and not self.Active then Menu.Visible = false end;
+		end);
+	end;
+	function Table:Toggle() if self.Active then self:Close() else self:Open() end end;
+	function Table:SetSize(NewSize)
+		self.Size = NewSize; if self.Active then Menu.Size = ResolveSize(); UpdatePosition() end;
+	end;
+	function Table:AddButton(A, B)
+		local Text, Fn, KeepOpen, Disabled;
+		if typeof(A) == "table" then
+			Text = A.Text or A.Name or "Button"; Fn = A.Func or A.Callback; KeepOpen = A.KeepOpen; Disabled = A.Disabled;
+		else
+			Text = tostring(A); Fn = B;
+		end;
+		local Button = Library:CreateInstance("TextButton", {
+			Parent = Menu; Size = UDim2.new(1, 0, 0, 26); BackgroundColor3 = Color3.fromHex("1C1C1C");
+			BorderSizePixel = 0; Text = tostring(Text); TextColor3 = Disabled and Color3.fromHex("707070") or Color3.fromHex("FFFFFF");
+			TextSize = 12; TextXAlignment = Enum.TextXAlignment.Left; Font = Enum.Font.Code; AutoButtonColor = false;
+		});
+		Library:CreateInstance("UIPadding", { Parent = Button; PaddingLeft = UDim.new(0, 8); PaddingRight = UDim.new(0, 8); });
+		Track(Button.MouseEnter, function() if not Disabled then Button.BackgroundColor3 = Color3.fromHex("252527") end end);
+		Track(Button.MouseLeave, function() Button.BackgroundColor3 = Color3.fromHex("1C1C1C") end);
+		Track(Button.MouseButton1Click, function()
+			if Disabled then return end;
+			if typeof(Fn) == "function" then task.spawn(Fn) end;
+			if not KeepOpen then CloseContextMenus(nil) end;
+		end);
+		if self.Active then Menu.Size = ResolveSize(); UpdatePosition() end;
+		return Button;
+	end;
+	function Table:AddLabel(Text)
+		local Label = Library:CreateInstance("TextLabel", {
+			Parent = Menu; Size = UDim2.new(1, 0, 0, 20); BackgroundTransparency = 1;
+			Text = tostring(Text); TextColor3 = Color3.fromHex("8C8F99"); TextSize = 12;
+			TextXAlignment = Enum.TextXAlignment.Left; Font = Enum.Font.Code;
+		});
+		if self.Active then Menu.Size = ResolveSize(); UpdatePosition() end;
+		return Label;
+	end;
+	function Table:AddDivider()
+		local Divider = Library:CreateInstance("Frame", { Parent = Menu; Size = UDim2.new(1, 0, 0, 5); BackgroundTransparency = 1; });
+		Library:CreateInstance("Frame", {
+			Parent = Divider; AnchorPoint = Vector2.new(0, 0.5); Position = UDim2.fromScale(0, 0.5);
+			Size = UDim2.new(1, 0, 0, 1); BackgroundColor3 = Color3.fromHex("393939"); BorderSizePixel = 0;
+		});
+		if self.Active then Menu.Size = ResolveSize(); UpdatePosition() end;
+		return Divider;
+	end;
+	function Table:Clear()
+		for _, Child in ipairs(Menu:GetChildren()) do if Child:IsA("GuiObject") then Child:Destroy() end end;
+		if self.Active then Menu.Size = ResolveSize(); UpdatePosition() end;
+	end;
+	function Table:Bind(HoldTime)
+		Track(Holder.InputBegan, function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton2 then self:Toggle() end;
+		end);
+		Library:BindLongPress(Holder, function() self:Toggle() end, HoldTime or 0.5);
+		return self;
+	end;
+	function Table:Destroy()
+		if self.Destroyed then return end;
+		CloseContextMenus(self);
+		if self.Active then self:Close() end;
+		self.Destroyed = true; self._AnimationToken += 1;
+		for _, Conn in ipairs(self.Connections) do Conn:Disconnect() end;
+		local Index = table.find(Library.ContextMenus, self);
+		if Index then table.remove(Library.ContextMenus, Index) end;
+		Menu:Destroy();
+	end;
+	Track(Holder:GetPropertyChangedSignal("AbsolutePosition"), function() if Table.Active then UpdatePosition() end end);
+	Track(Holder:GetPropertyChangedSignal("AbsoluteSize"), function() if Table.Active then UpdatePosition() end end);
+	Track(Holder.AncestryChanged, function() if not Holder.Parent and Table.Active then Table:Close() end end);
+	Library.ContextMenus = Library.ContextMenus or {}; table.insert(Library.ContextMenus, Table);
+	if not Library._ContextMenuInputBound then
+		Library._ContextMenuInputBound = true;
+		Library:Connection(UserInputService.InputBegan, function(Input)
+			if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.MouseButton2 and Input.UserInputType ~= Enum.UserInputType.Touch then return end;
+			local Check = CurrentContextMenu;
+			while Check do
+				if IsInsideContextArea(Check.Menu, Input.Position) or IsInsideContextArea(Check.Holder, Input.Position) then return end;
+				Check = Check.ParentMenu;
+			end;
+			CloseContextMenus(nil);
+		end);
+	end;
+	return Table;
+end;
 function Library:_MakeSatelliteBindable(Obj)
 	Library._SatelliteWindows = Library._SatelliteWindows or {};
 	table.insert(Library._SatelliteWindows, Obj);
