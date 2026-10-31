@@ -13,28 +13,7 @@ SaveManager:IgnoreThemeSettings()
 -- Optional: isolate configs for the current game.
 -- SaveManager:SetSubFolder(tostring(game.PlaceId))
 
-local Loading = Library:CreateLoading({
-    Title = "XoneScriptK",
-    TotalSteps = 4
-})
 
-Loading:SetMessage("Initializing...")
-Loading:SetDescription("Waiting for game to load...")
-task.wait(1)
-
-Loading:SetCurrentStep(1)
-Loading:SetDescription("Loading configuration...")
-task.wait(1)
-
-Loading:SetCurrentStep(2)
-task.wait(1)
-
-Loading:SetCurrentStep(3)
-Loading:SetDescription("Ready to start!")
-task.wait(1)
-
-Loading:SetCurrentStep(4)
-Loading:Continue()
 
 local Toggles = Library.Toggles
 local Options = Library.Options
@@ -48,13 +27,41 @@ local Options = Library.Options
 -- Library:SetLogo(false)
 
 local Watermark = Library:Watermark({
-    Text = "XoneScriptK | dev"
+    Text = "XoneScriptK | dev",
+    Position = UDim2.fromOffset(10, 110),
+    IconPosition = "left",
+    IconSize = 16,
+    Draggable = true
 });
+
+-- Watermark:SetText("XoneScriptK | custom status")
+-- Watermark:SetVisible(false)
+-- Watermark:SetPosition(Vector2.new(10, 110))
+-- Watermark:SetIconPosition("right")
+-- Watermark:SetIcon("rbxassetid://136469174415866")
+-- Watermark:SetAutoUpdate(false) -- Prevent HUD settings from replacing custom text.
+-- Watermark:SetRefreshRate(0.25)
+
+-- Obsidian-style custom draggable labels are independent from the HUD Watermark:
+-- local StatusLabel = Library:AddDraggableLabel({
+--     Text = "Custom status",
+--     Icon = "rbxassetid://136469174415866",
+--     IconPosition = "right",
+--     Position = UDim2.fromOffset(10, 145)
+-- })
+-- StatusLabel:SetText("Updated status")
+-- StatusLabel:SetVisible(false)
 
 local Window = Library:CreateWindow({
     Title = "XoneScriptK",
     Size = UDim2.fromOffset(550, 555)
 });
+
+-- Search by control, groupbox, tab, or tooltip using the sidebar search box.
+-- Press Ctrl+F to focus search, Enter to open the first result, or Escape to clear it.
+-- Window:UpdateSearch("Toggle")
+-- Window:ClearSearch()
+-- Set DisableSearch = true in CreateWindow to hide the search box.
 
 local Preview = Library:PreviewWindow({
     Title = "Preview",
@@ -416,7 +423,7 @@ TOther:AddSlider("TabboxSlider", {
 MiscBox:AddLabel("Loading animation (Library:CreateLoading)\nExample is at the top of the script, enabled by default.", true);
 
 --============================================================
--- Media tab: Viewport, Image, Video, and custom GUI passthrough
+-- Media tab: Viewport, Image, and custom GUI passthrough
 --============================================================
 local MediaBox = Tabs.Media:AddLeftGroupbox("Media")
 
@@ -443,15 +450,6 @@ MediaBox:AddImage("DemoImage", {
 })
 
 local PlaybackBox = Tabs.Media:AddRightGroupbox("Playback")
-
-local DemoVideo = PlaybackBox:AddVideo("DemoVideo", {
-    Height = 140,
-    Looped = true,
-    Playing = false,
-    Volume = 1
-})
--- Set a valid video asset before calling DemoVideo:Play().
--- DemoVideo:SetVideo("rbxassetid://1234567890")
 
 local CustomLabel = Instance.new("TextLabel")
 CustomLabel.Size = UDim2.fromScale(1, 1)
