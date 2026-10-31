@@ -4658,6 +4658,7 @@ end;
 		Library:OnAccent(RefreshColors);
 		local PopupIn  = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out);
 		local PopupOut = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In);
+		local PopupGap = 60;
 		local ActiveTween = nil;
 		local function AnchorXY()
 			local AbsPos  = Box.AbsolutePosition;
@@ -4665,18 +4666,8 @@ end;
 			local Width   = math.max(AbsSize.X, 40);
 			local Height  = Popup.Size.Y.Offset;
 			Popup.Size = UDim2.new(0, Width, 0, Height);
-			local Cam = Workspace.CurrentCamera;
-			local Vp = (Cam and Cam.ViewportSize) or Vector2.new(800, 600);
-			local X = math.clamp(AbsPos.X, 4, math.max(Vp.X - Width - 4, 4));
-			local BelowY = AbsPos.Y + AbsSize.Y;
-			local AboveY = AbsPos.Y - Height;
-			local Y = BelowY;
-			if BelowY + Height > Vp.Y - 4 and AboveY >= 4 then
-				Y = AboveY;
-			else
-				Y = math.clamp(BelowY, 4, math.max(Vp.Y - Height - 4, 4));
-			end;
-			return math.floor(X), math.floor(Y);
+			local X, Y = AbsPos.X, AbsPos.Y + AbsSize.Y + PopupGap;
+			return Library:ClampPopupXY(Popup, X, Y);
 		end;
 		local function StopFollowing()
 			if FollowConn then FollowConn:Disconnect(); FollowConn = nil end;
