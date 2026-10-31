@@ -5635,6 +5635,14 @@ end;
 		Visible                = false;
 		ZIndex                 = 100;
 	});
+	Library:CreateInstance("UIGradient", {
+		Parent   = SearchResults;
+		Rotation = 90;
+		Color    = NewColorSequence({
+			NewColorSequenceKeypoint(0, Color3.fromHex("181818"));
+			NewColorSequenceKeypoint(1, Color3.fromHex("101010"));
+		});
+	});
 	Library:CreateInstance("UIStroke", {
 		Parent    = SearchResults;
 		Color     = Color3.fromHex("393939");
@@ -5644,21 +5652,21 @@ end;
 		Parent        = SearchResults;
 		FillDirection = Enum.FillDirection.Vertical;
 		SortOrder     = Enum.SortOrder.LayoutOrder;
-		Padding       = UDim.new(0, 2);
+		Padding       = UDim.new(0, 3);
 	});
 	Library:CreateInstance("UIPadding", {
 		Parent        = SearchResults;
-		PaddingTop    = UDim.new(0, 3);
-		PaddingBottom = UDim.new(0, 3);
-		PaddingLeft   = UDim.new(0, 3);
-		PaddingRight  = UDim.new(0, 3);
+		PaddingTop    = UDim.new(0, 4);
+		PaddingBottom = UDim.new(0, 4);
+		PaddingLeft   = UDim.new(0, 4);
+		PaddingRight  = UDim.new(0, 4);
 	});
 	Library:RegisterAccent(SearchResults, "ScrollBarImageColor3");
 	local SearchInput = Library:CreateInstance("TextBox", {
 		Name                   = "Input";
 		Parent                 = SearchRoot;
 		Size                   = UDim2.fromScale(1, 1);
-		BackgroundColor3       = Color3.fromHex("101010");
+		BackgroundColor3       = Color3.fromHex("151515");
 		BorderSizePixel        = 0;
 		Text                   = "";
 		PlaceholderText        = tostring(Opts.SearchPlaceholder or "Search");
@@ -5670,17 +5678,124 @@ end;
 		ClearTextOnFocus       = false;
 		ZIndex                 = 101;
 	});
+	Library:CreateInstance("UIGradient", {
+		Parent   = SearchInput;
+		Rotation = 90;
+		Color    = NewColorSequence({
+			NewColorSequenceKeypoint(0, Color3.fromHex("1C1C1C"));
+			NewColorSequenceKeypoint(1, Color3.fromHex("111111"));
+		});
+	});
 	Library:CreateInstance("UIStroke", {
 		Parent    = SearchInput;
-		Color     = Color3.fromHex("393939");
+		Color     = Color3.fromHex("000000");
 		Thickness = 1;
 	});
+	Library:CreateInstance("UIStroke", {
+		Parent       = SearchInput;
+		Color        = Color3.fromHex("393939");
+		Thickness    = 1;
+		Transparency = 0.25;
+	});
+	local SearchFocusStroke = Library:CreateInstance("UIStroke", {
+		Parent       = SearchInput;
+		Color        = Library.Accent;
+		Thickness    = 1;
+		Transparency = 1;
+	});
+	Library:RegisterAccent(SearchFocusStroke, "Color");
 	Library:CreateInstance("UIPadding", {
 		Parent       = SearchInput;
-		PaddingLeft  = UDim.new(0, 7);
-		PaddingRight = UDim.new(0, 7);
+		PaddingLeft  = UDim.new(0, 26);
+		PaddingRight = UDim.new(0, 32);
 	});
-	if ProggyCleanFont then SearchInput.FontFace = ProggyCleanFont end;
+	local SearchIcon = Library:CreateInstance("Frame", {
+		Name                   = "SearchIcon";
+		Parent                 = SearchInput;
+		Position               = UDim2.fromOffset(6, 0);
+		Size                   = UDim2.fromOffset(16, 30);
+		BackgroundTransparency = 1;
+		ZIndex                 = 102;
+	});
+	local SearchLens = Library:CreateInstance("Frame", {
+		Parent                 = SearchIcon;
+		Position               = UDim2.fromOffset(0, 8);
+		Size                   = UDim2.fromOffset(9, 9);
+		BackgroundTransparency = 1;
+		ZIndex                 = 103;
+	});
+	Library:CreateInstance("UICorner", { Parent = SearchLens; CornerRadius = UDim.new(1, 0) });
+	local SearchLensStroke = Library:CreateInstance("UIStroke", {
+		Parent    = SearchLens;
+		Color     = Color3.fromHex("777777");
+		Thickness = 1;
+	});
+	local SearchHandle = Library:CreateInstance("Frame", {
+		Parent           = SearchIcon;
+		Position         = UDim2.fromOffset(10, 17);
+		Size             = UDim2.fromOffset(6, 1);
+		Rotation         = 45;
+		BackgroundColor3 = Color3.fromHex("777777");
+		BorderSizePixel  = 0;
+		ZIndex           = 103;
+	});
+	local SearchShortcut = Library:CreateInstance("TextLabel", {
+		Name                   = "Shortcut";
+		Parent                 = SearchInput;
+		AnchorPoint            = Vector2.new(1, 0.5);
+		Position               = UDim2.new(1, -4, 0.5, 0);
+		Size                   = UDim2.fromOffset(27, 15);
+		BackgroundColor3       = Color3.fromHex("101010");
+		BorderSizePixel        = 0;
+		Text                   = "Ctrl+F";
+		TextColor3             = Color3.fromHex("777777");
+		TextSize               = 8;
+		Visible                = not IsMobilePlatform;
+		ZIndex                 = 103;
+	});
+	Library:CreateInstance("UIStroke", { Parent = SearchShortcut; Color = Color3.fromHex("303030"); Thickness = 1 });
+	local SearchClear = Library:CreateInstance("TextButton", {
+		Name                   = "Clear";
+		Parent                 = SearchInput;
+		AnchorPoint            = Vector2.new(1, 0.5);
+		Position               = UDim2.new(1, -4, 0.5, 0);
+		Size                   = UDim2.fromOffset(18, 18);
+		BackgroundColor3       = Color3.fromHex("202020");
+		BorderSizePixel        = 0;
+		AutoButtonColor        = false;
+		Text                   = "x";
+		TextColor3             = Color3.fromHex("999999");
+		TextSize               = 12;
+		Visible                = false;
+		ZIndex                 = 103;
+	});
+	Library:CreateInstance("UIStroke", { Parent = SearchClear; Color = Color3.fromHex("393939"); Thickness = 1 });
+	if ProggyCleanFont then
+		SearchInput.FontFace = ProggyCleanFont;
+		SearchShortcut.FontFace = ProggyCleanFont;
+		SearchClear.FontFace = ProggyCleanFont;
+	end;
+	local SearchFocused = false;
+	local function RefreshSearchChrome()
+		local HasText = SearchInput.Text ~= "";
+		SearchClear.Visible = HasText;
+		SearchShortcut.Visible = not IsMobilePlatform and not HasText and not SearchFocused;
+		local IconColor = SearchFocused and Color3.fromHex("FFFFFF") or Color3.fromHex("777777");
+		SearchLensStroke.Color = IconColor;
+		SearchHandle.BackgroundColor3 = IconColor;
+	end;
+	Library:Connection(SearchClear.MouseButton1Click, function()
+		Window:ClearSearch();
+		SearchInput:CaptureFocus();
+	end);
+	Library:Connection(SearchClear.MouseEnter, function()
+		SearchClear.BackgroundColor3 = Color3.fromHex("303030");
+		SearchClear.TextColor3 = Color3.fromHex("FFFFFF");
+	end);
+	Library:Connection(SearchClear.MouseLeave, function()
+		SearchClear.BackgroundColor3 = Color3.fromHex("202020");
+		SearchClear.TextColor3 = Color3.fromHex("999999");
+	end);
 	Window.SearchRoot = SearchRoot;
 	Window.SearchInput = SearchInput;
 	Window.SearchResults = SearchResults;
@@ -5861,9 +5976,10 @@ end;
 			for I = 1, Count do
 				local Entry = Entries[I];
 				local Button = Library:CreateInstance("TextButton", {
-					Parent = SearchResults; Size = UDim2.new(1, 0, 0, 33); BackgroundColor3 = Color3.fromHex("181818");
+					Parent = SearchResults; Size = UDim2.new(1, 0, 0, 33); BackgroundColor3 = Color3.fromHex("151515");
 					BorderSizePixel = 0; AutoButtonColor = false; Text = ""; LayoutOrder = I; ZIndex = 101;
 				});
+				Library:CreateInstance("UIStroke", { Parent = Button; Color = Color3.fromHex("282828"); Thickness = 1 });
 				local NameLabel = Library:CreateInstance("TextLabel", {
 					Parent = Button; Position = UDim2.fromOffset(5, 2); Size = UDim2.new(1, -10, 0, 15);
 					BackgroundTransparency = 1; Text = Entry.Name; TextColor3 = Color3.fromHex("FFFFFF");
@@ -5875,8 +5991,8 @@ end;
 					TextSize = 9; TextXAlignment = Enum.TextXAlignment.Left; TextTruncate = Enum.TextTruncate.AtEnd; ZIndex = 102;
 				});
 				if ProggyCleanFont then NameLabel.FontFace = ProggyCleanFont; PathLabel.FontFace = ProggyCleanFont end;
-				Button.MouseEnter:Connect(function() Button.BackgroundColor3 = Color3.fromHex("232323") end);
-				Button.MouseLeave:Connect(function() Button.BackgroundColor3 = Color3.fromHex("181818") end);
+				Button.MouseEnter:Connect(function() Button.BackgroundColor3 = Color3.fromHex("222222") end);
+				Button.MouseLeave:Connect(function() Button.BackgroundColor3 = Color3.fromHex("151515") end);
 				Button.MouseButton1Click:Connect(function() self:RevealSearchResult(Entry) end);
 			end;
 		end;
@@ -5886,6 +6002,7 @@ end;
 		SearchInput.Text = "";
 		SearchResults.Visible = false;
 		self._SearchMatches = {};
+		RefreshSearchChrome();
 	end;
 	function Window:FocusSearch()
 		if SearchRoot.Visible and self.Visible and Gui.Enabled then SearchInput:CaptureFocus() end;
@@ -5894,11 +6011,20 @@ end;
 		local Win = self.CurrentlyOpen;
 		if Win and Win.UpdateSearch then Win:UpdateSearch(Text) end;
 	end;
-	Library:Connection(SearchInput:GetPropertyChangedSignal("Text"), function() Window:UpdateSearch(SearchInput.Text) end);
+	Library:Connection(SearchInput:GetPropertyChangedSignal("Text"), function()
+		RefreshSearchChrome();
+		Window:UpdateSearch(SearchInput.Text);
+	end);
 	Library:Connection(SearchInput.Focused, function()
+		SearchFocused = true;
+		RefreshSearchChrome();
+		Library:Tween(SearchFocusStroke, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 0 }):Play();
 		if SearchInput.Text ~= "" then Window:UpdateSearch(SearchInput.Text) end;
 	end);
 	Library:Connection(SearchInput.FocusLost, function(_, EnterPressed)
+		SearchFocused = false;
+		RefreshSearchChrome();
+		Library:Tween(SearchFocusStroke, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 1 }):Play();
 		if EnterPressed and Window._SearchMatches[1] then Window:RevealSearchResult(Window._SearchMatches[1]) end;
 	end);
 	Library:Connection(UserInputService.InputBegan, function(Input, GameProcessed)
