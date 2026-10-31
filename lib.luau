@@ -4519,11 +4519,11 @@ end;
 			Name              = "DropdownPopup";
 			Parent            = Host.Gui;
 			Size              = UDim2.new(0, 100, 0, 0);
-			AutomaticSize     = Enum.AutomaticSize.Y;
 			BackgroundColor3  = Color3.fromHex("000000");
 			BorderSizePixel   = 0;
 			Visible           = false;
 			GroupTransparency = 1;
+			ClipsDescendants  = true;
 			ZIndex            = 50;
 		});
 		Library:CreateInstance("UIPadding", {
@@ -4536,8 +4536,7 @@ end;
 		local PopupGray = Library:CreateInstance("Frame", {
 			Parent           = Popup;
 			Position         = UDim2.new(0, 0, 0, 0);
-			Size             = UDim2.new(1, 0, 0, 0);
-			AutomaticSize    = Enum.AutomaticSize.Y;
+			Size             = UDim2.new(1, 0, 1, 0);
 			BackgroundColor3 = Color3.fromHex("393939");
 			BorderSizePixel  = 0;
 			ZIndex           = 50;
@@ -4549,15 +4548,22 @@ end;
 			PaddingTop    = UDim.new(0, 1);
 			PaddingBottom = UDim.new(0, 1);
 		});
-		local PopupInside = Library:CreateInstance("Frame", {
+		local PopupInside = Library:CreateInstance("ScrollingFrame", {
 			Parent                 = PopupGray;
 			Position               = UDim2.new(0, 0, 0, 0);
-			Size                   = UDim2.new(1, 0, 0, 0);
-			AutomaticSize          = Enum.AutomaticSize.Y;
+			Size                   = UDim2.new(1, 0, 1, 0);
 			BackgroundColor3       = Color3.fromHex("131313");
 			BorderSizePixel        = 0;
+			CanvasSize             = UDim2.fromOffset(0, 0);
+			AutomaticCanvasSize    = Enum.AutomaticSize.None;
+			ScrollBarThickness     = 2;
+			ScrollBarImageColor3   = Color3.fromHex("808080");
+			ScrollingDirection     = Enum.ScrollingDirection.Y;
+			Active                 = true;
+			ClipsDescendants       = true;
 			ZIndex                 = 50;
 		});
+		Library:RegisterAccent(PopupInside, "ScrollBarImageColor3");
 		Library:CreateInstance("UIListLayout", {
 			Parent        = PopupInside;
 			FillDirection = Enum.FillDirection.Vertical;
@@ -4565,8 +4571,20 @@ end;
 			Padding       = UDim.new(0, 0);
 		});
 		local Open = false;
+		local Destroyed = false;
 		local OptionButtons = {};
 		local ClosePopup;
+		local FollowConn = nil;
+		local PopupToken = 0;
+		local ItemHeight = 14;
+		local MaxVisibleItems = math.max(1, math.floor(tonumber(Opts.MaxVisibleItems or Opts.MaxVisibleDropdownItems) or 8));
+		local function RefreshPopupSize()
+			local Count = #Options;
+			local VisibleItems = math.min(Count, MaxVisibleItems);
+			local Height = VisibleItems * ItemHeight + 4;
+			Popup.Size = UDim2.new(0, math.max(Box.AbsoluteSize.X, 40), 0, Height);
+			PopupInside.CanvasSize = UDim2.fromOffset(0, Count * ItemHeight);
+		end;
 		local function IsSelected(Opt)
 			Opt = tostring(Opt);
 			if Multi then return Value[Opt] == true end;
@@ -4609,7 +4627,7 @@ end;
 				local Btn = Library:CreateInstance("TextButton", {
 					Name                   = "Option_" .. tostring(Opt);
 					Parent                 = PopupInside;
-					Size                   = UDim2.new(1, 0, 0, 14);
+					Size                   = UDim2.new(1, 0, 0, ItemHeight);
 					BackgroundColor3       = Color3.fromHex("131313");
 					BorderSizePixel        = 0;
 					AutoButtonColor        = false;
@@ -4632,60 +4650,94 @@ end;
 				end);
 				table.insert(OptionButtons, Btn);
 			end;
+			PopupInside.CanvasPosition = Vector2.new(0, 0);
+			RefreshPopupSize();
 		end;
 		BuildOptions();
 		ValLbl.Text = DisplayText();
 		Library:OnAccent(RefreshColors);
 		local PopupIn  = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out);
 		local PopupOut = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In);
-		local SlideOff = 10;
-		local PopupGap = 60;
+		local PopupGap = 2;
+		local ActiveTween = nil;
 		local function AnchorXY()
 			local AbsPos  = Box.AbsolutePosition;
 			local AbsSize = Box.AbsoluteSize;
-			Popup.Size = UDim2.new(0, AbsSize.X, 0, 0);
-			local X, Y = AbsPos.X, AbsPos.Y + AbsSize.Y + PopupGap;
-			return Library:ClampPopupXY(Popup, X, Y);
+			local Width   = math.max(AbsSize.X, 40);
+			local Height  = Popup.Size.Y.Offset;
+			Popup.Size = UDim2.new(0, Width, 0, Height);
+			local Cam = Workspace.CurrentCamera;
+			local Vp = (Cam and Cam.ViewportSize) or Vector2.new(800, 600);
+			local X = math.clamp(AbsPos.X, 4, math.max(Vp.X - Width - 4, 4));
+			local BelowY = AbsPos.Y + AbsSize.Y + PopupGap;
+			local AboveY = AbsPos.Y - Height - PopupGap;
+			local Y = BelowY;
+			if BelowY + Height > Vp.Y - 4 and AboveY >= 4 then
+				Y = AboveY;
+			else
+				Y = math.clamp(BelowY, 4, math.max(Vp.Y - Height - 4, 4));
+			end;
+			return math.floor(X), math.floor(Y);
+		end;
+		local function StopFollowing()
+			if FollowConn then FollowConn:Disconnect(); FollowConn = nil end;
+		end;
+		local function UpdatePopupPosition()
+			if Destroyed or not Open then return end;
+			if not Box.Parent or not Library:IsEffectivelyVisible(Box) then
+				ClosePopup();
+				return;
+			end;
+			local X, Y = AnchorXY();
+			Popup.Position = UDim2.fromOffset(X, Y);
 		end;
 		ClosePopup = function()
-			if not Open then return end;
+			if Destroyed then return end;
+			PopupToken = PopupToken + 1;
+			local Mine = PopupToken;
+			StopFollowing();
+			if Library._OpenDropdown == ClosePopup then Library._OpenDropdown = nil end;
+			if ActiveTween then ActiveTween:Cancel(); ActiveTween = nil end;
+			if not Open then Popup.Visible = false; SetArrow(true); return end;
 			Open = false;
-			local X, Y = AnchorXY();
-			Library:Tween(Popup, PopupOut, {
-				Position          = UDim2.fromOffset(X, Y - SlideOff);
-				GroupTransparency = 1;
-			}):Play();
-			task.delay(PopupOut.Time, function()
-				if not Open then Popup.Visible = false end;
-			end);
+			if IsMobilePlatform then Library.CanDrag = true end;
 			SetArrow(true);
+			ActiveTween = Library:Tween(Popup, PopupOut, { GroupTransparency = 1 });
+			ActiveTween:Play();
+			task.delay(PopupOut.Time, function()
+				if PopupToken == Mine and not Open then
+					Popup.Visible = false;
+					ActiveTween = nil;
+				end;
+			end);
 		end;
-		Box.MouseButton1Click:Connect(function()
-			Open = not Open;
-			if IsMobilePlatform then Library.CanDrag = not Open end;
-			local X, Y = AnchorXY();
-			if Open then
-				Popup.Visible           = true;
-				Popup.Position          = UDim2.fromOffset(X, Y - SlideOff);
-				Popup.GroupTransparency = 1;
-				Library:Tween(Popup, PopupIn, {
-					Position          = UDim2.fromOffset(X, Y);
-					GroupTransparency = 0;
-				}):Play();
-				SetArrow(false);
-			else
-				Library:Tween(Popup, PopupOut, {
-					Position          = UDim2.fromOffset(X, Y - SlideOff);
-					GroupTransparency = 1;
-				}):Play();
-				task.delay(PopupOut.Time, function()
-					if not Open then Popup.Visible = false end;
-				end);
-				SetArrow(true);
+		local function OpenPopup()
+			if Destroyed then return end;
+			if Open then ClosePopup(); return end;
+			if not Box.Parent or not Library:IsEffectivelyVisible(Box) then return end;
+			if Library._OpenDropdown and Library._OpenDropdown ~= ClosePopup then
+				pcall(Library._OpenDropdown);
 			end;
-		end);
+			Library._OpenDropdown = ClosePopup;
+			Open = true;
+			PopupToken = PopupToken + 1;
+			if ActiveTween then ActiveTween:Cancel(); ActiveTween = nil end;
+			RefreshPopupSize();
+			PopupInside.CanvasPosition = Vector2.new(0, 0);
+			local X, Y = AnchorXY();
+			Popup.Position = UDim2.fromOffset(X, Y);
+			Popup.Visible = true;
+			Popup.GroupTransparency = 1;
+			ActiveTween = Library:Tween(Popup, PopupIn, { GroupTransparency = 0 });
+			ActiveTween:Play();
+			SetArrow(false);
+			if IsMobilePlatform then Library.CanDrag = false end;
+			StopFollowing();
+			FollowConn = Library:Connection(RunService.RenderStepped, UpdatePopupPosition);
+		end;
+		Box.MouseButton1Click:Connect(OpenPopup);
 		Library:Connection(UserInputService.InputBegan, function(Input)
-			if not Open then return end;
+			if Destroyed or not Open then return end;
 			if Input.UserInputType ~= Enum.UserInputType.MouseButton1 and Input.UserInputType ~= Enum.UserInputType.Touch then return end;
 			local Mx, My = Input.Position.X, Input.Position.Y;
 			local function InAbs(Inst)
@@ -4693,17 +4745,19 @@ end;
 				return Mx >= P.X and Mx <= P.X + S.X and My >= P.Y and My <= P.Y + S.Y;
 			end;
 			if InAbs(Box) or InAbs(Popup) then return end;
+			ClosePopup();
+		end);
+		Library:Connection(Container:GetPropertyChangedSignal("Visible"), function()
+			if not Container.Visible then ClosePopup() end;
+		end);
+		Library:Connection(Container.Destroying, function()
+			Destroyed = true;
 			Open = false;
+			StopFollowing();
+			if Library._OpenDropdown == ClosePopup then Library._OpenDropdown = nil end;
+			if ActiveTween then ActiveTween:Cancel(); ActiveTween = nil end;
 			if IsMobilePlatform then Library.CanDrag = true end;
-			local X, Y = AnchorXY();
-			Library:Tween(Popup, PopupOut, {
-				Position          = UDim2.fromOffset(X, Y - SlideOff);
-				GroupTransparency = 1;
-			}):Play();
-			task.delay(PopupOut.Time, function()
-				if not Open then Popup.Visible = false end;
-			end);
-			SetArrow(true);
+			Popup:Destroy();
 		end);
 		if Opts.Tooltip then Library:Tooltip(Box, Opts.Tooltip) end;
 		if Opts.Dependency and typeof(Opts.Dependency.OnChange) == "function" then
@@ -5970,6 +6024,7 @@ RegisterGradLerp(GradEntry)
 		return TabRef;
 	end;
 	self.CurrentlyOpen = Window;
+	if Library._SyncMobileMenuButton then Library:_SyncMobileMenuButton() end;
 	Library._Windows = Library._Windows or {}; table.insert(Library._Windows, Window);
 	Window.Visible = true;
 	Window._ActiveFade = nil;
@@ -6063,6 +6118,7 @@ RegisterGradLerp(GradEntry)
 		end;
 		Gui:Destroy();
 		if Library.CurrentlyOpen == self then Library.CurrentlyOpen = nil end;
+		if Library._SyncMobileMenuButton then Library:_SyncMobileMenuButton() end;
 	end;
 	return Window;
 end;
@@ -7402,15 +7458,12 @@ ApplySettingsContents = function(self)
 		if IsMobilePlatform then
 			MenuBtnToggle = SecMenu:Toggle({
 				Name = "Floating Menu Button"; Flag = "MobileMenuBtn";
-				Default = Library.MobileMenuButton ~= nil;
+				Default = Library._MobileMenuButtonEnabled ~= false;
 				Tooltip = "Shows the on-screen Toggle UI / Lock UI buttons";
 				Callback = function(S)
-					if S then
-						local B = Library.CreateMobileMenuButton and Library:CreateMobileMenuButton();
-						if B then B:Show() end;
-					elseif Library.MobileMenuButton then
-						Library.MobileMenuButton:Hide();
-					end;
+					Library._MobileMenuButtonEnabled = S;
+					if S and Library.CreateMobileMenuButton then Library:CreateMobileMenuButton() end;
+					Library:_SyncMobileMenuButton();
 				end;
 			});
 		end;
@@ -10193,11 +10246,19 @@ do
 			end);
 		end);
 	end;
+	function Library:_SyncMobileMenuButton()
+		local Btn = self.MobileMenuButton;
+		if not (Btn and Btn.Gui) then return end;
+		local Loading = (self._ActiveLoadingCount or 0) > 0;
+		local Ready = self.CurrentlyOpen ~= nil and not Loading and not self.Unloaded;
+		Btn.Gui.Enabled = Ready and self._MobileMenuButtonEnabled ~= false;
+	end;
 	local function CreateMobileMenuButton()
 		if Library.MobileMenuButton then return Library.MobileMenuButton end;
 		local BtnGui = OrigCreateInstance(Library, "ScreenGui", {
 			Name           = "MobileMenuButton";
 			Parent         = GuiRoot;
+			Enabled        = false;
 			IgnoreGuiInset = true;
 			ResetOnSpawn   = false;
 			DisplayOrder   = 9999;
@@ -10316,8 +10377,14 @@ do
 			LockBtn.Text = Library.CantDragForced and "Unlock UI" or "Lock UI";
 		end);
 		Obj = { Gui = BtnGui, Toggle = TogglePill, Lock = LockPill };
-		function Obj:Show() BtnGui.Enabled = true end;
-		function Obj:Hide() BtnGui.Enabled = false end;
+		function Obj:Show()
+			Library._MobileMenuButtonEnabled = true;
+			Library:_SyncMobileMenuButton();
+		end;
+		function Obj:Hide()
+			Library._MobileMenuButtonEnabled = false;
+			Library:_SyncMobileMenuButton();
+		end;
 		function Obj:Snap()
 			ClampFrameIntoViewport(TogglePill);
 			ClampFrameIntoViewport(LockPill);
@@ -10332,6 +10399,7 @@ do
 			Library:Notify("Menu buttons position reset", 1.5);
 		end;
 		Library.MobileMenuButton = Obj;
+		Library:_SyncMobileMenuButton();
 		return Obj;
 	end;
 	Library.CreateMobileMenuButton = CreateMobileMenuButton;
@@ -11180,6 +11248,8 @@ do
 end;
 function Library:CreateLoading(Opts)
 	Opts = typeof(Opts) == "table" and Opts or {};
+	self._ActiveLoadingCount = (self._ActiveLoadingCount or 0) + 1;
+	if self._SyncMobileMenuButton then self:_SyncMobileMenuButton() end;
 	local TitleText  = tostring(Opts.Title or Opts.Name or "Loading");
 	local TotalSteps = math.max(1, math.floor(tonumber(Opts.TotalSteps) or 1));
 	local Cam = Workspace.CurrentCamera;
@@ -11191,6 +11261,13 @@ function Library:CreateLoading(Opts)
 	local Max = Loader._Max;
 	local Destroyed = false;
 	local Loading = {};
+	local function FinishLoading()
+		if Destroyed then return false end;
+		Destroyed = true;
+		Library._ActiveLoadingCount = math.max((Library._ActiveLoadingCount or 1) - 1, 0);
+		if Library._SyncMobileMenuButton then Library:_SyncMobileMenuButton() end;
+		return true;
+	end;
 	if Opts.Message ~= nil then Loader:Set(0, Opts.Message) end;
 	if Opts.Description ~= nil then Loader:Set(nil, Opts.Description) end;
 	function Loading:SetMessage(T) Loader:Set(nil, T) end;
@@ -11203,13 +11280,11 @@ function Library:CreateLoading(Opts)
 		Loader:Set(math.clamp(tonumber(P) or 0, 0, 1) * Max);
 	end;
 	function Loading:Destroy()
-		if Destroyed then return end;
-		Destroyed = true;
+		if not FinishLoading() then return end;
 		Loader:Destroy();
 	end;
 	function Loading:Continue()
-		if Destroyed then return end;
-		Destroyed = true;
+		if not FinishLoading() then return end;
 		if typeof(Opts.Callback) == "function" then task.spawn(Opts.Callback) end;
 		Loader:Destroy();
 	end;
