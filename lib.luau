@@ -385,6 +385,7 @@ function Library:RegisterAccentGradient(Gradient)
 end;
 Library.Keybinds         = {};
 Library.KeybindListeners = {};
+Library.ShowToggleFrameInKeybinds = true;
 local function RegisterGradLerp(Entry)
     table.insert(Library._GradLerps, Entry)
 end
@@ -394,13 +395,23 @@ function Library:RegisterKeybind(Entry)
 	self:NotifyKeybind();
 	return Entry;
 end;
+function Library:UnregisterKeybind(Entry)
+	local Index = table.find(self.Keybinds, Entry);
+	if not Index then return end;
+	table.remove(self.Keybinds, Index);
+	self:NotifyKeybind();
+end;
 function Library:NotifyKeybind()
-	for _, Fn in self.KeybindListeners do Fn() end;
+	for _, Fn in self.KeybindListeners do pcall(Fn) end;
 end;
 function Library:OnKeybindChange(Fn)
 	if typeof(Fn) ~= "function" then return end;
 	table.insert(self.KeybindListeners, Fn);
 	Fn();
+	return function()
+		local Index = table.find(self.KeybindListeners, Fn);
+		if Index then table.remove(self.KeybindListeners, Index) end;
+	end;
 end;
 local AccentClock = 0;
 local LastOff = nil
@@ -1980,6 +1991,7 @@ local function BuildSection(Host, SecOpts)
 			Render();
 			if Fire ~= false then Callback(State) end;
 			for _, Fn in Listeners do Fn(State) end;
+			Library:NotifyKeybind();
 		end;
 		local SwipedAt = 0;
 		Row.MouseButton1Click:Connect(function()
@@ -2021,9 +2033,11 @@ local function BuildSection(Host, SecOpts)
 			self._HasKeybind = true;
 			BindOpts = typeof(BindOpts) == "table" and BindOpts or {};
 			local BindMode = string.lower(tostring(BindOpts.Mode or "Toggle"));
+			if BindMode ~= "toggle" and BindMode ~= "hold" and BindMode ~= "always" then BindMode = "toggle" end;
 			local Key      = BindOpts.Default;
 			local BindFlag      = tostring(BindOpts.Flag or (Flag .. "_Key"));
 			local BindOnChanged = typeof(BindOpts.OnChanged) == "function" and BindOpts.OnChanged or nil;
+			local MenuVisible   = BindOpts.MenuVisible ~= false and BindOpts.NoUI ~= true;
 			local function KeyText(K)
 				if K == nil then return "None" end;
 				if typeof(K) == "EnumItem" then return Library.KeyNames[K] or K.Name end;
@@ -2153,7 +2167,7 @@ local function BuildSection(Host, SecOpts)
 				if not KeyMatches(Input) then return end;
 				if BindMode == "hold" then
 					SetState(true);
-				else
+				elseif BindMode == "toggle" then
 					SetState(not State);
 				end;
 			end);
@@ -2162,12 +2176,21 @@ local function BuildSection(Host, SecOpts)
 				if not KeyMatches(Input) then return end;
 				SetState(false);
 			end);
-			Library:RegisterKeybind({
+			local BindEntry = Library:RegisterKeybind({
 				Name     = Name;
 				Mode     = BindMode;
+				GetMode  = function() return BindMode end;
 				GetKey   = function() return Key end;
 				GetState = function() return State end;
+				SetState = function(V) if BindMode == "toggle" then SetState(V) end end;
+				Toggle   = function() if BindMode == "toggle" then SetState(not State) end end;
+				GetMenuVisible = function() return MenuVisible end;
+				SetMenuVisible = function(V)
+					MenuVisible = V == true;
+					Library:NotifyKeybind();
+				end;
 			});
+			if BindMode == "always" then SetState(true) end;
 			self._RightOffset = Off + KBoxW + 4;
 			Lbl.Size = UDim2.new(1, -20 - self._RightOffset, 1, 0);
 			self.Keybind        = KBtn;
@@ -2175,6 +2198,7 @@ local function BuildSection(Host, SecOpts)
 			self.KeybindObj = {
 				GetKey   = function() return Key end;
 				GetState = function() return State end;
+				GetMode  = function() return BindMode end;
 				SetKey   = function(K)
 					if Listening then CancelListen() end;
 					Key = K;
@@ -2182,10 +2206,26 @@ local function BuildSection(Host, SecOpts)
 					if BindOnChanged then BindOnChanged(Key) end;
 					Library:NotifyKeybind();
 				end;
+				SetMode = function(M)
+					M = string.lower(tostring(M or "toggle"));
+					if M ~= "toggle" and M ~= "hold" and M ~= "always" then return end;
+					BindMode = M;
+					BindEntry.Mode = M;
+					if M == "always" then SetState(true) end;
+					Library:NotifyKeybind();
+				end;
+				GetMenuVisible = function() return MenuVisible end;
+				SetMenuVisible = function(V) BindEntry.SetMenuVisible(V) end;
+				SetText = function(T)
+					Name = tostring(T);
+					Lbl.Text = Name;
+					BindEntry.Name = Name;
+					Library:NotifyKeybind();
+				end;
 			};
 			Library.Options[BindFlag] = {
 				Save = function()
-					local Out = { _t = "Key" };
+					local Out = { _t = "Key", m = BindMode };
 					if typeof(Key) == "EnumItem" then
 						Out.k = tostring(Key.EnumType) .. "." .. Key.Name;
 					end;
@@ -2193,6 +2233,7 @@ local function BuildSection(Host, SecOpts)
 				end;
 				Load = function(Data)
 					if typeof(Data) ~= "table" or Data._t ~= "Key" then return end;
+					if Data.m and self.KeybindObj and self.KeybindObj.SetMode then self.KeybindObj.SetMode(Data.m) end;
 					local NewKey = nil;
 					if typeof(Data.k) == "string" then
 						local EType, EName = string.match(Data.k, "^(%w+)%.(%w+)$");
@@ -4817,11 +4858,13 @@ end;
 		Opts = typeof(Opts) == "table" and Opts or {};
 		local Name     = tostring(Opts.Name or Opts.Title or Opts.Text or "Keybind");
 		local Mode     = string.lower(tostring(Opts.Mode or "Toggle"));
+		if Mode ~= "toggle" and Mode ~= "hold" and Mode ~= "always" then Mode = "toggle" end;
 		local Callback = typeof(Opts.Callback) == "function" and Opts.Callback or function() end;
 		local OnChanged = typeof(Opts.OnChanged) == "function" and Opts.OnChanged or nil;
 		local Flag     = tostring(Opts.Flag or Opts.Pointer or ("_" .. Name));
 		local Key      = Opts.Default;
-		local State    = false;
+		local State    = Mode == "always";
+		local MenuVisible = Opts.MenuVisible ~= false and Opts.NoUI ~= true;
 		Library.Flags[Flag] = State;
 		local function KeyDisplay(K)
 			if K == nil then return "None" end;
@@ -4829,6 +4872,14 @@ end;
 				return Library.KeyNames[K] or K.Name;
 			end;
 			return tostring(K);
+		end;
+		local function SetState(V, Fire)
+			V = V == true;
+			if V == State then return end;
+			State = V;
+			Library.Flags[Flag] = State;
+			if Fire ~= false then Callback(State) end;
+			Library:NotifyKeybind();
 		end;
 		local Row = Library:CreateInstance("TextButton", {
 			Name                   = "Keybind_" .. Name;
@@ -4999,6 +5050,7 @@ end;
 			PaddingTop    = UDim.new(0, 2);
 			PaddingBottom = UDim.new(0, 2);
 		});
+		local Obj;
 		local PopupOpen = false;
 		local PopupToken = 0;
 		local PopupInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out);
@@ -5057,14 +5109,7 @@ end;
 			if ProggyCleanFont then Btn.FontFace = ProggyCleanFont end;
 			ModeBtns[M:lower()] = Btn;
 			Btn.MouseButton1Click:Connect(function()
-				Mode = M:lower();
-				if Mode == "always" then
-					State = true;
-					Library.Flags[Flag] = State;
-					Callback(true);
-				end;
-				RefreshModeBtns();
-				Library:NotifyKeybind();
+				Obj:SetMode(M);
 				ClosePopup();
 			end);
 		end;
@@ -5101,37 +5146,36 @@ end;
 			if UserInputService:GetFocusedTextBox() then return end;
 			if not KeyMatches(Input) then return end;
 			if Mode == "always" then
-				Callback();
-			elseif Mode == "hold" then
-				State = true;
-				Library.Flags[Flag] = State;
 				Callback(true);
+			elseif Mode == "hold" then
+				SetState(true);
 			else
-				State = not State;
-				Library.Flags[Flag] = State;
-				Callback(State);
+				SetState(not State);
 			end;
 		end);
 		Library:Connection(UserInputService.InputEnded, function(Input)
 			if Mode ~= "hold" then return end;
 			if not KeyMatches(Input) then return end;
-			if State then
-				State = false;
-				Library.Flags[Flag] = State;
-				Callback(false);
-			end;
+			if State then SetState(false) end;
 		end);
 		if Opts.Tooltip then Library:Tooltip(Row, Opts.Tooltip) end;
 		if Opts.Dependency and typeof(Opts.Dependency.OnChange) == "function" then
 			Opts.Dependency:OnChange(function(S) Row.Visible = S end);
 		end;
-		Library:RegisterKeybind({
+		local BindEntry = Library:RegisterKeybind({
 			Name     = Name;
 			GetMode  = function() return Mode end;
 			GetKey   = function() return Key end;
 			GetState = function() return State end;
+			SetState = function(V) if Mode == "toggle" then SetState(V) end end;
+			Toggle   = function() if Mode == "toggle" then SetState(not State) end end;
+			GetMenuVisible = function() return MenuVisible end;
+			SetMenuVisible = function(V)
+				MenuVisible = V == true;
+				Library:NotifyKeybind();
+			end;
 		});
-		local Obj = { Container = Row, Box = Box, Display = Display };
+		Obj = { Container = Row, Box = Box, Display = Display };
 		function Obj:Get() return State end;
 		function Obj:GetKey() return Key end;
 		function Obj:SetKey(K)
@@ -5139,6 +5183,25 @@ end;
 			Key = K;
 			Refresh();
 			if OnChanged then OnChanged(Key) end;
+			Library:NotifyKeybind();
+		end;
+		function Obj:GetMode() return Mode end;
+		function Obj:SetMode(M)
+			M = string.lower(tostring(M or "toggle"));
+			if M ~= "toggle" and M ~= "hold" and M ~= "always" then return end;
+			Mode = M;
+			RefreshModeBtns();
+			if Mode == "always" then SetState(true) end;
+			Library:NotifyKeybind();
+		end;
+		function Obj:SetState(V) if Mode == "toggle" then SetState(V) end end;
+		function Obj:GetMenuVisible() return MenuVisible end;
+		function Obj:SetMenuVisible(V) BindEntry.SetMenuVisible(V) end;
+		function Obj:SetText(T)
+			Name = tostring(T);
+			Lbl.Text = Name;
+			BindEntry.Name = Name;
+			Library:NotifyKeybind();
 		end;
 		Library.Options[Flag] = {
 			Save = function()
@@ -5150,10 +5213,7 @@ end;
 			end;
 			Load = function(Data)
 				if typeof(Data) ~= "table" or Data._t ~= "Key" then return end;
-				if Data.m then
-					Mode = string.lower(tostring(Data.m));
-					RefreshModeBtns();
-				end;
+				if Data.m then Obj:SetMode(Data.m) end;
 				local NewKey = nil;
 				if typeof(Data.k) == "string" then
 					local EType, EName = string.match(Data.k, "^(%w+)%.(%w+)$");
@@ -6008,17 +6068,21 @@ RegisterGradLerp(GradEntry)
 end;
 function Library:KeybindList(Opts)
 	Opts = typeof(Opts) == "table" and Opts or {};
+	if Library._KeybindList and not Library._KeybindList.Destroyed then Library._KeybindList:Destroy() end;
 	local Title = tostring(Opts.Title or Opts.Text or "Keybinds");
-	local Width = tonumber(Opts.Width) or 170;
+	local Width = math.clamp(tonumber(Opts.Width) or 210, 150, 360);
+	local ShowToggleState = Opts.ShowToggleState ~= false and Library.ShowToggleFrameInKeybinds ~= false;
 	local Gui = self:CreateInstance("ScreenGui", {
 		Name           = "KeybindList";
 		Parent         = (gethui and gethui()) or CoreGui;
 		IgnoreGuiInset = true;
 		ResetOnSpawn   = false;
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
+		DisplayOrder   = 20;
 	});
-	local SatAnchor, SatPos = Vector2.new(1, 0), UDim2.new(1, -10, 0, 210);
-	if IsMobilePlatform then SatPos = UDim2.new(1, -8, 0, 38) end;
+	local SatAnchor = Opts.AnchorPoint or Vector2.new(1, 0);
+	local SatPos = Opts.Position or UDim2.new(1, -10, 0, 210);
+	if IsMobilePlatform and not Opts.Position then SatPos = UDim2.new(1, -8, 0, 38) end;
 	local Frame = self:CreateInstance("Frame", {
 		Name             = "Keybinds";
 		Parent           = Gui;
@@ -6028,7 +6092,9 @@ function Library:KeybindList(Opts)
 		AutomaticSize    = Enum.AutomaticSize.Y;
 		BackgroundColor3 = Color3.fromHex("FFFFFF");
 		BorderSizePixel  = 0;
+		ClipsDescendants = false;
 	});
+	pcall(function() Library:AddGlowingV2(Frame, Library.Accent, 0.4) end);
 	self:CreateInstance("UIGradient", {
 		Parent   = Frame;
 		Rotation = 90;
@@ -6037,9 +6103,9 @@ function Library:KeybindList(Opts)
 			NewColorSequenceKeypoint(1, Color3.fromHex("141414"));
 		});
 	});
-	local function Edge(Anchor, Pos, Sz, Color)
+	local function Edge(Parent, Anchor, Pos, Sz, Color)
 		self:CreateInstance("Frame", {
-			Parent           = Frame;
+			Parent           = Parent;
 			AnchorPoint      = Anchor;
 			Position         = Pos;
 			Size             = Sz;
@@ -6048,7 +6114,7 @@ function Library:KeybindList(Opts)
 			ZIndex           = 5;
 		});
 	end;
-	Edge(Vector2.new(0, 0), UDim2.new(0, 0, 0, 0),  UDim2.new(1, 0, 0, 1),  "000000");
+	Edge(Frame, Vector2.new(0, 0), UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 1), "000000");
 	local TopLine = self:CreateInstance("Frame", {
 		Name             = "TopLine";
 		Parent           = Frame;
@@ -6058,18 +6124,17 @@ function Library:KeybindList(Opts)
 		BorderSizePixel  = 0;
 		ZIndex           = 5;
 	});
-	local TopGrad = self:CreateInstance("UIGradient", { Parent = TopLine; Rotation = 0 });
-	Library:RegisterAccentGradient(TopGrad);
-	Edge(Vector2.new(0, 1), UDim2.new(0, 0, 1, 0),  UDim2.new(1, 0, 0, 1),  "000000");
-	Edge(Vector2.new(0, 1), UDim2.new(0, 1, 1, -1), UDim2.new(1, -2, 0, 1), "393939");
-	Edge(Vector2.new(0, 0), UDim2.new(0, 0, 0, 0),  UDim2.new(0, 1, 1, 0),  "000000");
-	Edge(Vector2.new(0, 0), UDim2.new(0, 1, 0, 2),  UDim2.new(0, 1, 1, -3), "393939");
-	Edge(Vector2.new(1, 0), UDim2.new(1, 0, 0, 0),  UDim2.new(0, 1, 1, 0),  "000000");
-	Edge(Vector2.new(1, 0), UDim2.new(1, -1, 0, 2), UDim2.new(0, 1, 1, -3), "393939");
+	Library:RegisterAccentGradient(self:CreateInstance("UIGradient", { Parent = TopLine; Rotation = 0 }));
+	Edge(Frame, Vector2.new(0, 1), UDim2.new(0, 0, 1, 0), UDim2.new(1, 0, 0, 1), "000000");
+	Edge(Frame, Vector2.new(0, 1), UDim2.new(0, 1, 1, -1), UDim2.new(1, -2, 0, 1), "393939");
+	Edge(Frame, Vector2.new(0, 0), UDim2.new(0, 0, 0, 0), UDim2.new(0, 1, 1, 0), "000000");
+	Edge(Frame, Vector2.new(0, 0), UDim2.new(0, 1, 0, 2), UDim2.new(0, 1, 1, -3), "393939");
+	Edge(Frame, Vector2.new(1, 0), UDim2.new(1, 0, 0, 0), UDim2.new(0, 1, 1, 0), "000000");
+	Edge(Frame, Vector2.new(1, 0), UDim2.new(1, -1, 0, 2), UDim2.new(0, 1, 1, -3), "393939");
 	local Inner = self:CreateInstance("Frame", {
 		Name                   = "Inner";
 		Parent                 = Frame;
-		Position               = UDim2.new(0, 8, 0, 6);
+		Position               = UDim2.new(0, 8, 0, 5);
 		Size                   = UDim2.new(1, -16, 0, 0);
 		AutomaticSize          = Enum.AutomaticSize.Y;
 		BackgroundTransparency = 1;
@@ -6079,26 +6144,52 @@ function Library:KeybindList(Opts)
 		Parent        = Inner;
 		FillDirection = Enum.FillDirection.Vertical;
 		SortOrder     = Enum.SortOrder.LayoutOrder;
-		Padding       = UDim.new(0, 2);
+		Padding       = UDim.new(0, 3);
 	});
-	self:CreateInstance("UIPadding", {
-		Parent        = Inner;
-		PaddingBottom = UDim.new(0, 8);
+	self:CreateInstance("UIPadding", { Parent = Inner; PaddingBottom = UDim.new(0, 7) });
+	local Header = self:CreateInstance("Frame", {
+		Name                   = "Header";
+		Parent                 = Inner;
+		Size                   = UDim2.new(1, 0, 0, 18);
+		BackgroundTransparency = 1;
+		BorderSizePixel        = 0;
+		LayoutOrder            = 1;
+		Active                 = true;
 	});
 	local TitleLbl = self:CreateInstance("TextLabel", {
 		Name                   = "Title";
-		Parent                 = Inner;
-		Position               = UDim2.new(0, -1, 0, 0);
-		Size                   = UDim2.new(1, 0, 0, 13);
+		Parent                 = Header;
+		Size                   = UDim2.new(1, -42, 1, 0);
 		BackgroundTransparency = 1;
 		Text                   = Title;
 		TextColor3             = Color3.fromHex("FFFFFF");
 		TextSize               = 12;
+		TextTruncate           = Enum.TextTruncate.AtEnd;
 		TextXAlignment         = Enum.TextXAlignment.Left;
 		TextYAlignment         = Enum.TextYAlignment.Center;
-		LayoutOrder            = 1;
 	});
 	if ProggyCleanFont then TitleLbl.FontFace = ProggyCleanFont end;
+	local function HeaderButton(Name, Text, X)
+		local Btn = self:CreateInstance("TextButton", {
+			Name                   = Name;
+			Parent                 = Header;
+			AnchorPoint            = Vector2.new(1, 0.5);
+			Position               = UDim2.new(1, X, 0.5, 0);
+			Size                   = UDim2.fromOffset(18, 16);
+			BackgroundTransparency = 1;
+			BorderSizePixel        = 0;
+			AutoButtonColor        = false;
+			Text                   = Text;
+			TextColor3             = Color3.fromHex("8C8F99");
+			TextSize               = 13;
+		});
+		if ProggyCleanFont then Btn.FontFace = ProggyCleanFont end;
+		Btn.MouseEnter:Connect(function() Btn.TextColor3 = Color3.fromHex("FFFFFF") end);
+		Btn.MouseLeave:Connect(function() Btn.TextColor3 = Color3.fromHex("8C8F99") end);
+		return Btn;
+	end;
+	local SettingsBtn = HeaderButton("Visibility", "...", -20);
+	local CollapseBtn = HeaderButton("Collapse", "-", 0);
 	local Entries = self:CreateInstance("Frame", {
 		Name                   = "Entries";
 		Parent                 = Inner;
@@ -6112,74 +6203,344 @@ function Library:KeybindList(Opts)
 		Parent        = Entries;
 		FillDirection = Enum.FillDirection.Vertical;
 		SortOrder     = Enum.SortOrder.LayoutOrder;
-		Padding       = UDim.new(0, 2);
+		Padding       = UDim.new(0, 3);
 	});
-	self:CreateInstance("UIPadding", {
-		Parent     = Entries;
-		PaddingTop = UDim.new(0, 5);
+	local EmptyLbl = self:CreateInstance("TextLabel", {
+		Name                   = "Empty";
+		Parent                 = Entries;
+		Size                   = UDim2.new(1, 0, 0, 14);
+		BackgroundTransparency = 1;
+		Text                   = tostring(Opts.EmptyText or "No keybinds");
+		TextColor3             = Color3.fromHex("686B73");
+		TextSize               = 12;
+		TextXAlignment         = Enum.TextXAlignment.Left;
+		Visible                = false;
+		LayoutOrder            = -1;
 	});
-	self:Draggable(Frame);
+	if ProggyCleanFont then EmptyLbl.FontFace = ProggyCleanFont end;
+	local SettingsFrame = self:CreateInstance("Frame", {
+		Name             = "VisibleKeybinds";
+		Parent           = Gui;
+		Size             = UDim2.new(0, Width + 35, 0, 0);
+		AutomaticSize    = Enum.AutomaticSize.Y;
+		BackgroundColor3 = Color3.fromHex("171717");
+		BorderSizePixel  = 0;
+		Visible          = false;
+		ZIndex           = 30;
+	});
+	self:CreateInstance("UIStroke", { Parent = SettingsFrame; Color = Color3.fromHex("393939"); Thickness = 1 });
+	local SettingsInner = self:CreateInstance("Frame", {
+		Parent                 = SettingsFrame;
+		Position               = UDim2.new(0, 8, 0, 5);
+		Size                   = UDim2.new(1, -16, 0, 0);
+		AutomaticSize          = Enum.AutomaticSize.Y;
+		BackgroundTransparency = 1;
+		ZIndex                 = 31;
+	});
+	self:CreateInstance("UIListLayout", {
+		Parent = SettingsInner; FillDirection = Enum.FillDirection.Vertical;
+		SortOrder = Enum.SortOrder.LayoutOrder; Padding = UDim.new(0, 3);
+	});
+	self:CreateInstance("UIPadding", { Parent = SettingsInner; PaddingBottom = UDim.new(0, 7) });
+	local SettingsHeader = self:CreateInstance("Frame", {
+		Parent = SettingsInner; Size = UDim2.new(1, 0, 0, 18);
+		BackgroundTransparency = 1; LayoutOrder = 1; Active = true; ZIndex = 31;
+	});
+	local SettingsTitle = self:CreateInstance("TextLabel", {
+		Parent = SettingsHeader; Size = UDim2.new(1, -22, 1, 0); BackgroundTransparency = 1;
+		Text = "Visible Keybinds"; TextColor3 = Color3.fromHex("FFFFFF"); TextSize = 12;
+		TextXAlignment = Enum.TextXAlignment.Left; ZIndex = 32;
+	});
+	if ProggyCleanFont then SettingsTitle.FontFace = ProggyCleanFont end;
+	local CloseSettings = self:CreateInstance("TextButton", {
+		Parent = SettingsHeader; AnchorPoint = Vector2.new(1, 0.5); Position = UDim2.new(1, 0, 0.5, 0);
+		Size = UDim2.fromOffset(18, 16); BackgroundTransparency = 1; AutoButtonColor = false;
+		Text = "x"; TextColor3 = Color3.fromHex("8C8F99"); TextSize = 13; ZIndex = 32;
+	});
+	if ProggyCleanFont then CloseSettings.FontFace = ProggyCleanFont end;
+	local SettingsEntries = self:CreateInstance("Frame", {
+		Parent = SettingsInner; Size = UDim2.new(1, 0, 0, 0); AutomaticSize = Enum.AutomaticSize.Y;
+		BackgroundTransparency = 1; LayoutOrder = 2; ZIndex = 31;
+	});
+	self:CreateInstance("UIListLayout", {
+		Parent = SettingsEntries; FillDirection = Enum.FillDirection.Vertical;
+		SortOrder = Enum.SortOrder.LayoutOrder; Padding = UDim.new(0, 3);
+	});
+	self:Draggable(Frame, Header);
+	self:Draggable(SettingsFrame, SettingsHeader);
 	local function KeyName(Key)
 		if Key == nil then return "None" end;
 		if typeof(Key) == "EnumItem" then return Library.KeyNames[Key] or Key.Name end;
 		return tostring(Key);
 	end;
-	local Rows = {};
-	local function Rebuild()
-		for _, R in Rows do R:Destroy() end;
-		table.clear(Rows);
+	local function Read(Value, Default)
+		if typeof(Value) ~= "function" then return Default end;
+		local Ok, Result = pcall(Value);
+		if Ok then return Result end;
+		return Default;
+	end;
+	local function ModeTitle(Mode)
+		Mode = string.lower(tostring(Mode or "toggle"));
+		return Mode:sub(1, 1):upper() .. Mode:sub(2);
+	end;
+	local Obj = {
+		Gui = Gui, Frame = Frame, Outer = Frame, TitleLabel = TitleLbl,
+		SettingsFrame = SettingsFrame, SettingsContainer = SettingsEntries,
+		Container = Entries, Collapsed = false, SettingsOpen = false,
+		VisibilityControl = false, _Visible = Opts.Visible ~= false, Destroyed = false,
+	};
+	local Rows, SettingsRows = {}, {};
+	local ActiveFade, FadeOriginals, RemoveListener;
+	local Rebuild, RebuildSettings, PositionSettings;
+	local function CreateCheckbox(Parent, Checked, Z)
+		local Box = self:CreateInstance("Frame", {
+			Parent = Parent; AnchorPoint = Vector2.new(0, 0.5); Position = UDim2.new(0, 0, 0.5, 0);
+			Size = UDim2.fromOffset(11, 11); BackgroundColor3 = Color3.fromHex("050505");
+			BorderSizePixel = 0; ZIndex = Z or 1;
+		});
+		self:CreateInstance("UIStroke", { Parent = Box; Color = Color3.fromHex("393939"); Thickness = 1 });
+		local Fill = self:CreateInstance("Frame", {
+			Parent = Box; AnchorPoint = Vector2.new(0.5, 0.5); Position = UDim2.new(0.5, 0, 0.5, 0);
+			Size = Checked and UDim2.new(1, -4, 1, -4) or UDim2.fromOffset(0, 0);
+			BackgroundColor3 = Library.Accent; BackgroundTransparency = Checked and 0 or 1;
+			BorderSizePixel = 0; ZIndex = (Z or 1) + 1;
+		});
+		Library:RegisterAccent(Fill);
+		return Box, Fill;
+	end;
+	PositionSettings = function()
+		if not Obj.SettingsOpen then return end;
+		local Camera = workspace.CurrentCamera;
+		local Bounds = Camera and Camera.ViewportSize or Vector2.new(1920, 1080);
+		local P, S, SS = Frame.AbsolutePosition, Frame.AbsoluteSize, SettingsFrame.AbsoluteSize;
+		local X = P.X - SS.X - 8;
+		if X < 0 then X = P.X + S.X + 8 end;
+		SettingsFrame.Position = UDim2.fromOffset(
+			math.clamp(X, 0, math.max(0, Bounds.X - SS.X)),
+			math.clamp(P.Y, 0, math.max(0, Bounds.Y - SS.Y))
+		);
+	end;
+	RebuildSettings = function()
+		local Seen = {};
 		for I, Entry in Library.Keybinds do
-			local Key = Entry.GetKey and Entry.GetKey() or nil;
-			if Key ~= nil then
-				local Row = Library:CreateInstance("Frame", {
-					Name                   = "Entry";
-					Parent                 = Entries;
-					BackgroundTransparency = 1;
-					BorderSizePixel        = 0;
-					Size                   = UDim2.new(1, 0, 0, 13);
-					LayoutOrder            = I;
+			Seen[Entry] = true;
+			local Data = SettingsRows[Entry];
+			if not Data then
+				local Row = self:CreateInstance("TextButton", {
+					Parent = SettingsEntries; Size = UDim2.new(1, 0, 0, 16); BackgroundTransparency = 1;
+					AutoButtonColor = false; Text = ""; ZIndex = 31;
 				});
-				local DisplayName = tostring(Entry.Name or "?");
-				local NameLbl = Library:CreateInstance("TextLabel", {
-					Parent                 = Row;
-					AnchorPoint            = Vector2.new(0, 0.5);
-					Position               = UDim2.new(0, 0, 0.5, 0);
-					Size                   = UDim2.new(1, -50, 1, 0);
-					BackgroundTransparency = 1;
-					Text                   = DisplayName;
-					RichText               = true;
-					TextColor3             = Color3.fromHex("BFC4CC");
-					TextSize               = 12;
-					TextXAlignment         = Enum.TextXAlignment.Left;
-					TextYAlignment         = Enum.TextYAlignment.Center;
+				local Box, Fill = CreateCheckbox(Row, false, 31);
+				local Lbl = self:CreateInstance("TextLabel", {
+					Parent = Row; Position = UDim2.new(0, 17, 0, 0); Size = UDim2.new(1, -17, 1, 0);
+					BackgroundTransparency = 1; TextColor3 = Color3.fromHex("FFFFFF");
+					TextSize = 12; TextTruncate = Enum.TextTruncate.AtEnd; TextXAlignment = Enum.TextXAlignment.Left; ZIndex = 32;
 				});
-				local KeyLbl = Library:CreateInstance("TextLabel", {
-					Parent                 = Row;
-					AnchorPoint            = Vector2.new(1, 0.5);
-					Position               = UDim2.new(1, 0, 0.5, 0);
-					Size                   = UDim2.new(0, 46, 1, 0);
-					BackgroundTransparency = 1;
-					Text                   = KeyName(Key);
-					TextColor3             = Library.Accent;
-					TextSize               = 12;
-					TextXAlignment         = Enum.TextXAlignment.Right;
-					TextYAlignment         = Enum.TextYAlignment.Center;
-				});
-				Library:RegisterAccent(KeyLbl, "TextColor3");
-				if ProggyCleanFont then
-					NameLbl.FontFace = ProggyCleanFont;
-					KeyLbl.FontFace  = ProggyCleanFont;
+				if ProggyCleanFont then Lbl.FontFace = ProggyCleanFont end;
+				Row.MouseButton1Click:Connect(function()
+					if Entry.SetMenuVisible then
+						local Visible = Read(Entry.GetMenuVisible, Entry.MenuVisible ~= false) ~= false;
+						Entry.SetMenuVisible(not Visible);
+					end;
+				end);
+				Data = { Row = Row, Box = Box, Fill = Fill, Label = Lbl };
+				SettingsRows[Entry] = Data;
+			end;
+			local Visible = Read(Entry.GetMenuVisible, Entry.MenuVisible ~= false) ~= false;
+			local Key = Read(Entry.GetKey, nil);
+			local Mode = string.lower(Read(Entry.GetMode, Entry.Mode or "toggle"));
+			Data.Row.LayoutOrder = I;
+			Data.Fill.Size = Visible and UDim2.new(1, -4, 1, -4) or UDim2.fromOffset(0, 0);
+			Data.Fill.BackgroundTransparency = Visible and 0 or 1;
+			Data.Label.Text = string.format("[%s] %s (%s)", KeyName(Key), tostring(Entry.Name or "?"), ModeTitle(Mode));
+			Data.Label.TextTransparency = Visible and 0 or 0.5;
+		end;
+		for Entry, Data in SettingsRows do
+			if not Seen[Entry] then Data.Row:Destroy(); SettingsRows[Entry] = nil end;
+		end;
+		task.defer(PositionSettings);
+	end;
+	Rebuild = function()
+		if Obj.Destroyed then return end;
+		local Seen, Count = {}, 0;
+		for I, Entry in Library.Keybinds do
+			local Key = Read(Entry.GetKey, nil);
+			local Visible = Read(Entry.GetMenuVisible, Entry.MenuVisible ~= false) ~= false;
+			if Key ~= nil and Visible then
+				Seen[Entry] = true;
+				Count += 1;
+				local Mode = string.lower(Read(Entry.GetMode, Entry.Mode or "toggle"));
+				local State = Read(Entry.GetState, false) == true or Mode == "always";
+				local ShowCheck = ShowToggleState and Mode == "toggle";
+				local Data = Rows[Entry];
+				if Data and Data.ShowCheck ~= ShowCheck then Data.Row:Destroy(); Rows[Entry] = nil; Data = nil end;
+				if not Data then
+					local Row = self:CreateInstance("TextButton", {
+						Name = "Entry"; Parent = Entries; BackgroundTransparency = 1; BorderSizePixel = 0;
+						Size = UDim2.new(1, 0, 0, 16); AutoButtonColor = false; Text = "";
+					});
+					local Box, Fill;
+					if ShowCheck then Box, Fill = CreateCheckbox(Row, false) end;
+					local NameLbl = self:CreateInstance("TextLabel", {
+						Parent = Row; Position = UDim2.new(0, ShowCheck and 17 or 0, 0, 0);
+						Size = UDim2.new(1, ShowCheck and -17 or 0, 1, 0); BackgroundTransparency = 1;
+						TextSize = 12; TextTruncate = Enum.TextTruncate.AtEnd;
+						TextXAlignment = Enum.TextXAlignment.Left; TextYAlignment = Enum.TextYAlignment.Center;
+					});
+					if ProggyCleanFont then NameLbl.FontFace = ProggyCleanFont end;
+					Row.MouseButton1Click:Connect(function()
+						local CurrentMode = string.lower(Read(Entry.GetMode, Entry.Mode or "toggle"));
+						if CurrentMode ~= "toggle" then return end;
+						if Entry.Toggle then pcall(Entry.Toggle)
+						elseif Entry.SetState then pcall(Entry.SetState, not Read(Entry.GetState, false)) end;
+					end);
+					Row.MouseEnter:Connect(function()
+						local CurrentMode = string.lower(Read(Entry.GetMode, Entry.Mode or "toggle"));
+						if CurrentMode == "toggle" then NameLbl.TextTransparency = 0 end;
+					end);
+					Row.MouseLeave:Connect(function()
+						local CurrentState = Read(Entry.GetState, false) == true;
+						NameLbl.TextTransparency = CurrentState and 0 or 0.45;
+					end);
+					Data = { Row = Row, Label = NameLbl, Box = Box, Fill = Fill, ShowCheck = ShowCheck };
+					Rows[Entry] = Data;
 				end;
-				table.insert(Rows, Row);
+				Data.Row.LayoutOrder = I;
+				Data.Label.Text = string.format("[%s] %s (%s)", KeyName(Key), tostring(Entry.Name or "?"), ModeTitle(Mode));
+				Data.Label.TextColor3 = State and Color3.fromHex("FFFFFF") or Color3.fromHex("BFC4CC");
+				Data.Label.TextTransparency = (State or Mode == "always") and 0 or 0.45;
+				if Data.Fill then
+					Data.Fill.Size = State and UDim2.new(1, -4, 1, -4) or UDim2.fromOffset(0, 0);
+					Data.Fill.BackgroundTransparency = State and 0 or 1;
+				end;
 			end;
 		end;
+		for Entry, Data in Rows do
+			if not Seen[Entry] then Data.Row:Destroy(); Rows[Entry] = nil end;
+		end;
+		EmptyLbl.Visible = Opts.ShowEmpty == true and Count == 0;
+		if Obj.SettingsOpen then RebuildSettings() end;
 	end;
-	Library:OnKeybindChange(Rebuild);
-	local Obj = { Gui = Gui, Frame = Frame, TitleLabel = TitleLbl };
-	function Obj:Refresh() Rebuild() end;
-	function Obj:SetTitle(NewTitle) TitleLbl.Text = string.upper(tostring(NewTitle)) end;
-	function Obj:Destroy() Gui:Destroy() end;
+	local function CaptureFade()
+		local Map = {};
+		local Types = {
+			Frame = {"BackgroundTransparency"}; TextLabel = {"BackgroundTransparency", "TextTransparency"};
+			TextButton = {"BackgroundTransparency", "TextTransparency"}; UIStroke = {"Transparency"};
+			UIShadow = {"Transparency"}; ImageLabel = {"BackgroundTransparency", "ImageTransparency"};
+		};
+		local function Cap(Inst)
+			local Props = Types[Inst.ClassName];
+			if not Props then return end;
+			local PMap = {};
+			for _, Prop in Props do
+				local Ok, Value = pcall(function() return Inst[Prop] end);
+				if Ok then PMap[Prop] = Value end;
+			end;
+			Map[Inst] = PMap;
+		end;
+		Cap(Frame);
+		for _, D in Frame:GetDescendants() do Cap(D) end;
+		return Map;
+	end;
+	function Obj:Refresh()
+		Rebuild();
+		if not ActiveFade then FadeOriginals = CaptureFade() end;
+	end;
+	function Obj:SetTitle(NewTitle) TitleLbl.Text = tostring(NewTitle) end;
+	function Obj:SetCollapsed(Collapsed)
+		self.Collapsed = Collapsed == true;
+		Entries.Visible = not self.Collapsed;
+		CollapseBtn.Text = self.Collapsed and "+" or "-";
+		if self.Collapsed then
+			Frame.AutomaticSize = Enum.AutomaticSize.None;
+			Frame.Size = UDim2.new(0, Width, 0, 30);
+		else
+			Frame.AutomaticSize = Enum.AutomaticSize.Y;
+			Frame.Size = UDim2.new(0, Width, 0, 0);
+		end;
+		task.defer(PositionSettings);
+	end;
+	function Obj:ToggleCollapsed() self:SetCollapsed(not self.Collapsed) end;
+	function Obj:SetSettingsOpen(Open)
+		Open = Open == true;
+		if Open and not self.VisibilityControl then return end;
+		self.SettingsOpen = Open;
+		SettingsFrame.Visible = Open;
+		if Open then RebuildSettings() end;
+		task.defer(PositionSettings);
+	end;
+	function Obj:ToggleSettings() self:SetSettingsOpen(not self.SettingsOpen) end;
+	function Obj:SetVisibilityControl(Enabled)
+		self.VisibilityControl = Enabled == true;
+		SettingsBtn.Visible = self.VisibilityControl;
+		if not self.VisibilityControl then self:SetSettingsOpen(false) end;
+	end;
+	function Obj:SetToggleStateVisible(Visible)
+		ShowToggleState = Visible == true;
+		self:Refresh();
+	end;
+	function Obj:SetPosition(Position) Frame.Position = Position; task.defer(PositionSettings) end;
+	function Obj:SetVisible(State)
+		State = State and true or false;
+		if self.Destroyed then return end;
+		if self._Visible == State and Gui.Enabled == State and not ActiveFade then return end;
+		self._Visible = State;
+		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
+		if not State then self:SetSettingsOpen(false) end;
+		if Library._ReduceAnimations then
+			if not FadeOriginals then FadeOriginals = CaptureFade() end;
+			Library:_SnapFadeGroup(FadeOriginals, State and "in" or "out");
+			Gui.Enabled = State;
+			return;
+		end;
+		if not State then
+			FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
+		elseif not FadeOriginals then
+			FadeOriginals = CaptureFade();
+		end;
+		if State then
+			Gui.Enabled = true;
+			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function() ActiveFade = nil end);
+		else
+			ActiveFade = Library:_FadeGroup(FadeOriginals, "out", 0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, function()
+				if not self._Visible then Gui.Enabled = false end;
+				ActiveFade = nil;
+			end);
+		end;
+	end;
+	function Obj:Toggle() self:SetVisible(not self._Visible) end;
+	function Obj:GetVisible() return self._Visible end;
+	function Obj:Destroy()
+		if self.Destroyed then return end;
+		self.Destroyed = true;
+		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
+		if RemoveListener then RemoveListener(); RemoveListener = nil end;
+		Gui:Destroy();
+		if Library._KeybindList == self then Library._KeybindList = nil end;
+		if Library.KeybindMenu == self then Library.KeybindMenu = nil end;
+		if Library.KeybindFrame == Frame then Library.KeybindFrame = nil end;
+		if Library.KeybindContainer == Entries then Library.KeybindContainer = nil end;
+		local Index = table.find(Library._SatelliteWindows or {}, self);
+		if Index then table.remove(Library._SatelliteWindows, Index) end;
+	end;
+	SettingsBtn.MouseButton1Click:Connect(function() Obj:ToggleSettings() end);
+	CollapseBtn.MouseButton1Click:Connect(function() Obj:ToggleCollapsed() end);
+	CloseSettings.MouseButton1Click:Connect(function() Obj:SetSettingsOpen(false) end);
+	Frame:GetPropertyChangedSignal("AbsolutePosition"):Connect(function() if Obj.SettingsOpen then PositionSettings() end end);
+	Library:_MakeSatelliteBindable(Obj);
 	Library._KeybindList = Obj;
+	Library.KeybindMenu = Obj;
+	Library.KeybindFrame = Frame;
+	Library.KeybindContainer = Entries;
+	Obj:SetVisibilityControl(Opts.VisibilityControl == true);
+	Obj:SetCollapsed(Opts.Collapsed == true);
+	Rebuild();
+	FadeOriginals = CaptureFade();
+	if not Obj._Visible then
+		Library:_SnapFadeGroup(FadeOriginals, "out");
+		Gui.Enabled = false;
+	end;
+	RemoveListener = Library:OnKeybindChange(function() Obj:Refresh() end);
 	return Obj;
 end;
 function Library:Watermark(Opts)
@@ -7213,7 +7574,7 @@ ApplySettingsContents = function(self)
 		SecHud:Slider({ Name = "Refresh Rate", Flag = "WatermarkRate", Min = 0, Max = 2, Step = 0.05, Decimals = 2, Default = 0.1 });
 		local KeybindListToggle = SecHud:Toggle({
 			Name     = "Keybind List", Default = true;
-			Callback = function(S) if Library._KeybindList then Library._KeybindList.Gui.Enabled = S end end;
+			Callback = function(S) if Library._KeybindList then Library._KeybindList:SetVisible(S) end end;
 		});
 		do
 			local LP = game:GetService("Players").LocalPlayer;
@@ -8564,6 +8925,15 @@ function Library:Unload()
 		Win.Gui:Destroy();
 	end;
 	self.CurrentlyOpen = nil;
+	for I = #(self._SatelliteWindows or {}), 1, -1 do
+		local Satellite = self._SatelliteWindows[I];
+		if Satellite and Satellite.Destroy then pcall(function() Satellite:Destroy() end) end;
+	end;
+	self._SatelliteWindows = {};
+	self._KeybindList = nil;
+	self.KeybindMenu = nil;
+	self.KeybindFrame = nil;
+	self.KeybindContainer = nil;
 	for _, G in ipairs(self._MobileRegistry or {}) do
 		pcall(function() if G and G.Parent then G:Destroy() end end);
 	end;
@@ -10220,10 +10590,35 @@ do
 	local function WrapKeyProxy(Idx, Entry, KProxy, KeyObj)
 		KProxy.Save = function() return Entry.Save() end;
 		KProxy.Load = function(Data) Entry.Load(Data) end;
+		KProxy.MenuVisible = not KeyObj.GetMenuVisible or KeyObj.GetMenuVisible() ~= false;
 		function KProxy:GetState() return KeyObj.GetState() end;
 		function KProxy:SetKey(K) KeyObj.SetKey(KeyFromString(K) or K) end;
+		function KProxy:GetMode()
+			return KeyObj.GetMode and KeyObj.GetMode() or self.Mode;
+		end;
+		function KProxy:SetMode(M)
+			if KeyObj.SetMode then KeyObj.SetMode(M) end;
+			self.Mode = tostring(M or self.Mode);
+		end;
 		function KProxy:SetValue(V)
-			if typeof(V) == "table" then self:SetKey(V[1] or V.Key) else self:SetKey(V) end;
+			if typeof(V) == "table" then
+				local NewMode = V[2] or V.Mode;
+				if NewMode then self:SetMode(NewMode) end;
+				self:SetKey(V[1] or V.Key);
+			else
+				self:SetKey(V);
+			end;
+		end;
+		function KProxy:SetMenuVisibility(V)
+			self.MenuVisible = V == true;
+			if KeyObj.SetMenuVisible then KeyObj.SetMenuVisible(self.MenuVisible) end;
+		end;
+		function KProxy:GetMenuVisibility()
+			return KeyObj.GetMenuVisible and KeyObj.GetMenuVisible() or self.MenuVisible;
+		end;
+		function KProxy:SetText(T)
+			if KeyObj.SetText then KeyObj.SetText(T) end;
+			self.Text = tostring(T);
 		end;
 		function KProxy:OnChanged(Fn)
 			if typeof(Fn) == "function" then table.insert(self._Cbs, Fn) end;
@@ -10310,6 +10705,8 @@ do
 				Obj:AddKeybind({
 					Default = KeyFromString(KOpts.Default);
 					Mode    = KOpts.Mode;
+					MenuVisible = KOpts.MenuVisible;
+					NoUI = KOpts.NoUI;
 					Flag    = KIdx;
 					OnChanged = function(K)
 						KProxy.Value = KeyToString(K);
@@ -10480,6 +10877,7 @@ do
 				Name = Opts.Text or Opts.Name or Idx;
 				Mode = Opts.Mode;
 				Default = KeyFromString(Opts.Default);
+				MenuVisible = Opts.MenuVisible; NoUI = Opts.NoUI;
 				Tooltip = Opts.Tooltip; Flag = Idx;
 				Callback = function(State) if UserCb then UserCb(State) end end;
 				OnChanged = function(K)
@@ -10491,6 +10889,11 @@ do
 			return WrapKeyProxy(Idx, Library.Options[Idx], KProxy, {
 				GetState = function() return Obj:Get() end;
 				SetKey   = function(K) Obj:SetKey(K) end;
+				GetMode  = function() return Obj:GetMode() end;
+				SetMode  = function(M) Obj:SetMode(M) end;
+				GetMenuVisible = function() return Obj:GetMenuVisible() end;
+				SetMenuVisible = function(V) Obj:SetMenuVisible(V) end;
+				SetText = function(T) Obj:SetText(T) end;
 			});
 		end;
 		Sec.AddColorPicker = function(self, Idx, Opts)
