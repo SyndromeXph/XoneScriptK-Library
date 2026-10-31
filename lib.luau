@@ -6444,7 +6444,9 @@ function Library:KeybindList(Opts)
 	end;
 	function Obj:Refresh()
 		Rebuild();
-		if not ActiveFade then FadeOriginals = CaptureFade() end;
+		if self._Visible and Gui.Enabled and not ActiveFade then
+			FadeOriginals = CaptureFade();
+		end;
 	end;
 	function Obj:SetTitle(NewTitle) TitleLbl.Text = tostring(NewTitle) end;
 	function Obj:SetCollapsed(Collapsed)
@@ -6488,16 +6490,14 @@ function Library:KeybindList(Opts)
 		if ActiveFade then ActiveFade:Disconnect(); ActiveFade = nil end;
 		if not State then self:SetSettingsOpen(false) end;
 		if Library._ReduceAnimations then
-			if not FadeOriginals then FadeOriginals = CaptureFade() end;
+			if State or not FadeOriginals then
+				FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
+			end;
 			Library:_SnapFadeGroup(FadeOriginals, State and "in" or "out");
 			Gui.Enabled = State;
 			return;
 		end;
-		if not State then
-			FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
-		elseif not FadeOriginals then
-			FadeOriginals = CaptureFade();
-		end;
+		FadeOriginals = Library:_RefreshFadeMap(FadeOriginals, CaptureFade());
 		if State then
 			Gui.Enabled = true;
 			ActiveFade = Library:_FadeGroup(FadeOriginals, "in", 0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, function() ActiveFade = nil end);
