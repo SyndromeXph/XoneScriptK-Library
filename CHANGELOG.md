@@ -1,8 +1,8 @@
 10.31.2026
 
 ```diff
-[Addons Support]
-Add SaveManager and ThemeManager modules, Add config autoload, custom themes, default themes, JSON import/export and Library.Addons integration
+[Addons and Settings]
+Add SaveManager and ThemeManager modules, Restore the classic Settings configuration UI in SaveManager, Keep the new ThemeManager and remove duplicate Settings sections
 ```
 
 10.31.2026
