@@ -1,6 +1,5 @@
 -- XoneScriptK ThemeManager
 
-
 local HttpService = game:GetService("HttpService")
 
 local ThemeManager = {
@@ -497,7 +496,7 @@ end
 
 function ThemeManager:CreateGroupBox(Tab, IconName)
     assert(typeof(Tab) == "table" and Tab.AddGroupbox, "A XoneScriptK tab is required")
-    return Tab:AddGroupbox({ Side = "Left", Name = "Themes", IconName = IconName or "paintbrush" })
+    return Tab:AddGroupbox({ Side = "Right", Name = "Themes", IconName = IconName or "paintbrush" })
 end
 
 function ThemeManager:ApplyToTab(Tab, IconName)
