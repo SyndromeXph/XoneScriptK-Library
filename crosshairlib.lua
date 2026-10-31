@@ -1,0 +1,448 @@
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+local AxiomCrosshair = {}
+AxiomCrosshair.__index = AxiomCrosshair
+
+local DEFAULT_CONFIG = {
+	Enabled             = false,
+	HideDefaultCursor   = false,
+
+	Style               = "Classic",
+	Length              = 10,
+	Thickness           = 2,
+	Gap                 = 6,
+
+	DotEnabled          = false,
+	DotSize             = 3,
+
+	Color               = Color3.fromRGB(255, 255, 255),
+	OutlineEnabled      = false,
+	OutlineColor        = Color3.fromRGB(0, 0, 0),
+	OutlineThickness    = 1,
+
+	Alpha               = 1.0,
+
+	CircleRadius        = 20,
+	CircleThickness     = 2,
+
+	Rotation            = 0,
+	SpinEnabled         = false,
+	SpinSpeed           = 90,
+	SpinDirection       = 1,
+
+	DynamicSpread       = false,
+	SpreadAmount        = 8,
+	SpreadSpeed         = 10,
+	MovementSpread      = true,
+	ShootSpread         = true,
+	SpreadRecoverySpeed = 6,
+
+	RecoilEnabled       = false,
+	RecoilAmount        = 4,
+	RecoilRecovery      = 8,
+
+	PulseEnabled        = false,
+	PulseSpeed          = 2,
+	PulseMin            = 0.5,
+	PulseMax            = 1.0,
+
+	RainbowEnabled      = false,
+	RainbowSpeed        = 1,
+
+	OffsetX             = 0,
+	OffsetY             = 0,
+
+	SmoothFollow        = false,
+	SmoothSpeed         = 18,
+
+	Version             = "0.3CQ",
+}
+
+print(DEFAULT_CONFIG.Version)
+
+function AxiomCrosshair.new(customConfig)
+	local self = setmetatable({}, AxiomCrosshair)
+
+	self.Config = {}
+	for k, v in pairs(DEFAULT_CONFIG) do self.Config[k] = v end
+	if customConfig then
+		for k, v in pairs(customConfig) do self.Config[k] = v end
+	end
+
+	self._currentSpread = 0
+	self._targetSpread  = 0
+	self._currentRecoil = 0
+	self._spinAngle     = self.Config.Rotation
+	self._pulseTime     = 0
+	self._rainbowTime   = 0
+	self._smoothX       = 0
+	self._smoothY       = 0
+	self._connections   = {}
+	self._screenGui     = nil
+	self._pivot         = nil
+	self._elements      = {}
+
+	self:_BuildGui()
+	self:_StartLoop()
+
+	if self.Config.HideDefaultCursor then
+		UserInputService.MouseIconEnabled = false
+	end
+
+	return self
+end
+
+function AxiomCrosshair:_BuildGui()
+	if self._screenGui then self._screenGui:Destroy() end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name            = "AxiomCrosshairGui"
+	gui.ResetOnSpawn    = false
+	gui.IgnoreGuiInset  = true
+	gui.DisplayOrder    = 999
+	gui.Parent          = LocalPlayer:WaitForChild("PlayerGui")
+	self._screenGui     = gui
+
+	-- fullscreen backdrop
+	local backdrop = Instance.new("Frame")
+	backdrop.Name                   = "Backdrop"
+	backdrop.Size                   = UDim2.new(1, 0, 1, 0)
+	backdrop.BackgroundTransparency = 1
+	backdrop.Parent                 = gui
+	self._backdrop = backdrop
+
+	-- pivot: this sits ON the cursor and rotates — all arms are children of this
+	local pivot = Instance.new("Frame")
+	pivot.Name                   = "Pivot"
+	pivot.AnchorPoint            = Vector2.new(0.5, 0.5)
+	pivot.BackgroundTransparency = 1
+	pivot.BorderSizePixel        = 0
+	pivot.Size                   = UDim2.new(0, 0, 0, 0)
+	pivot.Parent                 = backdrop
+	self._pivot = pivot
+
+	self._elements = {}
+	self:_RebuildLines()
+end
+
+function AxiomCrosshair:_MakeLine(name, w, h)
+	local f = Instance.new("Frame")
+	f.Name              = name
+	f.AnchorPoint       = Vector2.new(0.5, 0.5)
+	f.BorderSizePixel   = 0
+	f.BackgroundColor3  = self.Config.Color
+	f.Size              = UDim2.new(0, w, 0, h)
+	f.BackgroundTransparency = 1 - self.Config.Alpha
+	f.Parent            = self._pivot
+	return f
+end
+
+function AxiomCrosshair:_RebuildLines()
+	for _, e in pairs(self._elements) do
+		if type(e) == "table" then
+			if e.outline and e.outline.Parent then e.outline:Destroy() end
+			if e.inner and e.inner.Parent then e.inner:Destroy() end
+		elseif typeof(e) == "Instance" and e.Parent then
+			e:Destroy()
+		end
+	end
+	self._elements = {}
+
+	local cfg   = self.Config
+	local style = cfg.Style
+	local t     = cfg.Thickness
+	local l     = cfg.Length
+	local g     = cfg.Gap
+
+	if style == "Classic" or style == "Cross" then
+		local function makeArm(name, w, h, ox, oy)
+			local inner = self:_MakeLine(name, w, h)
+			inner.ZIndex   = 2
+			inner.Position = UDim2.new(0, ox, 0, oy)
+
+			local outline
+			if cfg.OutlineEnabled then
+				outline = self:_MakeLine(name .. "_ol", w + cfg.OutlineThickness * 2, h + cfg.OutlineThickness * 2)
+				outline.BackgroundColor3 = cfg.OutlineColor
+				outline.ZIndex           = 1
+				outline.Position         = UDim2.new(0, ox, 0, oy)
+			end
+			return { inner = inner, outline = outline, ox = ox, oy = oy, bw = w, bh = h }
+		end
+
+		local half = l / 2 + g
+		self._elements.Top    = makeArm("Top",    t, l,  0,     -half)
+		self._elements.Bottom = makeArm("Bottom", t, l,  0,      half)
+		self._elements.Left   = makeArm("Left",   l, t, -half,   0)
+		self._elements.Right  = makeArm("Right",  l, t,  half,   0)
+
+		if cfg.DotEnabled then
+			local d   = cfg.DotSize * 2
+			local dot = self:_MakeLine("Dot", d, d)
+			dot.ZIndex   = 3
+			dot.Position = UDim2.new(0, 0, 0, 0)
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(1, 0)
+			corner.Parent = dot
+			self._elements.Dot = { inner = dot }
+		end
+
+	elseif style == "X-Shape" then
+		local diag = l * 1.4
+		local arms = {
+			{ name = "DiagA", rot = 45  },
+			{ name = "DiagB", rot = -45 },
+		}
+		for _, a in ipairs(arms) do
+			local inner = self:_MakeLine(a.name, diag, t)
+			inner.ZIndex    = 2
+			inner.Position  = UDim2.new(0, 0, 0, 0)
+			inner.Rotation  = a.rot
+			self._elements[a.name] = { inner = inner, baseRot = a.rot }
+		end
+
+	elseif style == "T-Shape" then
+		local half = l / 2 + g
+		self._elements.Top   = { inner = self:_MakeLine("Top",   t, l) }
+		self._elements.Left  = { inner = self:_MakeLine("Left",  l, t) }
+		self._elements.Right = { inner = self:_MakeLine("Right", l, t) }
+		self._elements.Top.inner.Position   = UDim2.new(0, 0,     0, -half)
+		self._elements.Left.inner.Position  = UDim2.new(0, -half, 0,  0)
+		self._elements.Right.inner.Position = UDim2.new(0,  half, 0,  0)
+
+	elseif style == "Circle" then
+		local r      = cfg.CircleRadius
+		local canvas = Instance.new("Frame")
+		canvas.Name                   = "Circle"
+		canvas.AnchorPoint            = Vector2.new(0.5, 0.5)
+		canvas.BackgroundTransparency = 1
+		canvas.BorderSizePixel        = 0
+		canvas.Size                   = UDim2.new(0, r * 2, 0, r * 2)
+		canvas.Position               = UDim2.new(0, 0, 0, 0)
+		canvas.ZIndex                 = 2
+		canvas.Parent                 = self._pivot
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness  = cfg.CircleThickness
+		stroke.Color      = cfg.Color
+		stroke.Parent     = canvas
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent       = canvas
+
+		self._elements.Circle = { frame = canvas, stroke = stroke }
+
+	elseif style == "Dot" then
+		local d   = cfg.DotSize * 2
+		local dot = self:_MakeLine("Dot", d, d)
+		dot.ZIndex   = 3
+		dot.Position = UDim2.new(0, 0, 0, 0)
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = dot
+		self._elements.Dot = { inner = dot }
+	end
+end
+
+function AxiomCrosshair:_StartLoop()
+	local conn = RunService.RenderStepped:Connect(function(dt)
+		self:_Update(dt)
+	end)
+	table.insert(self._connections, conn)
+end
+
+function AxiomCrosshair:_Update(dt)
+	local cfg = self.Config
+	if not self._screenGui then return end
+
+	if not cfg.Enabled then
+		self._screenGui.Enabled = false
+		return
+	end
+	self._screenGui.Enabled = true
+
+	local screenSize = self._screenGui.AbsoluteSize
+	local cx = screenSize.X / 2 + cfg.OffsetX
+	local cy = screenSize.Y / 2 + cfg.OffsetY
+
+	-- move pivot dead onto cursor
+	self._pivot.Position = UDim2.new(0, cx, 0, cy)
+
+	-- spin: rotate the entire pivot
+	if cfg.SpinEnabled then
+		self._spinAngle = self._spinAngle + cfg.SpinSpeed * cfg.SpinDirection * dt
+	else
+		self._spinAngle = cfg.Rotation
+	end
+	self._pivot.Rotation = self._spinAngle
+
+	-- spread
+	local targetSpread = 0
+	if cfg.DynamicSpread and cfg.MovementSpread then
+		local char = LocalPlayer.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local vel   = hrp.AssemblyLinearVelocity
+				local speed = Vector3.new(vel.X, 0, vel.Z).Magnitude
+				if speed > 0.5 then
+					targetSpread = math.min((speed / 16) * cfg.SpreadAmount, cfg.SpreadAmount)
+				end
+			end
+		end
+	end
+
+	self._targetSpread  = targetSpread
+	self._currentSpread = self._currentSpread + (self._targetSpread - self._currentSpread) * math.min(dt * cfg.SpreadSpeed, 1)
+
+	if self._currentRecoil > 0 then
+		self._currentRecoil = math.max(0, self._currentRecoil - dt * cfg.RecoilRecovery * 10)
+	end
+
+	local spread = self._currentSpread + self._currentRecoil
+
+	-- pulse
+	local pulseAlpha = cfg.Alpha
+	if cfg.PulseEnabled then
+		self._pulseTime = self._pulseTime + dt * cfg.PulseSpeed * math.pi * 2
+		local s = (math.sin(self._pulseTime) + 1) / 2
+		pulseAlpha = cfg.PulseMin + (cfg.PulseMax - cfg.PulseMin) * s
+	end
+
+	-- color
+	local activeColor = cfg.Color
+	if cfg.RainbowEnabled then
+		self._rainbowTime = (self._rainbowTime + dt * cfg.RainbowSpeed) % 1
+		activeColor = Color3.fromHSV(self._rainbowTime, 1, 1)
+	end
+
+	local transp = 1 - pulseAlpha
+	local style  = cfg.Style
+	local l      = cfg.Length
+	local t      = cfg.Thickness
+	local half   = l / 2 + cfg.Gap + spread
+
+	if style == "Classic" or style == "Cross" then
+		local function updateArm(arm, ox, oy, w, h)
+			if not arm then return end
+			arm.inner.Position               = UDim2.new(0, ox, 0, oy)
+			arm.inner.Size                   = UDim2.new(0, w, 0, h)
+			arm.inner.BackgroundColor3       = activeColor
+			arm.inner.BackgroundTransparency = transp
+			if arm.outline then
+				arm.outline.Position               = UDim2.new(0, ox, 0, oy)
+				arm.outline.Size                   = UDim2.new(0, w + cfg.OutlineThickness*2, 0, h + cfg.OutlineThickness*2)
+				arm.outline.BackgroundColor3       = cfg.OutlineColor
+				arm.outline.BackgroundTransparency = transp
+			end
+		end
+
+		updateArm(self._elements.Top,    0,     -half, t, l)
+		updateArm(self._elements.Bottom, 0,      half, t, l)
+		updateArm(self._elements.Left,  -half,   0,    l, t)
+		updateArm(self._elements.Right,  half,   0,    l, t)
+
+		if self._elements.Dot then
+			local d = cfg.DotSize * 2
+			self._elements.Dot.inner.BackgroundColor3       = activeColor
+			self._elements.Dot.inner.BackgroundTransparency = transp
+			self._elements.Dot.inner.Size                   = UDim2.new(0, d, 0, d)
+		end
+
+	elseif style == "X-Shape" then
+		for _, name in ipairs({"DiagA", "DiagB"}) do
+			local arm = self._elements[name]
+			if arm then
+				arm.inner.Size                   = UDim2.new(0, l * 1.4, 0, t)
+				arm.inner.BackgroundColor3       = activeColor
+				arm.inner.BackgroundTransparency = transp
+				arm.inner.Rotation               = arm.baseRot
+			end
+		end
+
+	elseif style == "T-Shape" then
+		if self._elements.Top   then
+			self._elements.Top.inner.Position               = UDim2.new(0, 0, 0, -half)
+			self._elements.Top.inner.BackgroundColor3       = activeColor
+			self._elements.Top.inner.BackgroundTransparency = transp
+		end
+		if self._elements.Left  then
+			self._elements.Left.inner.Position               = UDim2.new(0, -half, 0, 0)
+			self._elements.Left.inner.BackgroundColor3       = activeColor
+			self._elements.Left.inner.BackgroundTransparency = transp
+		end
+		if self._elements.Right then
+			self._elements.Right.inner.Position               = UDim2.new(0, half, 0, 0)
+			self._elements.Right.inner.BackgroundColor3       = activeColor
+			self._elements.Right.inner.BackgroundTransparency = transp
+		end
+
+	elseif style == "Circle" then
+		local el = self._elements.Circle
+		if el then
+			local r = cfg.CircleRadius
+			el.frame.Size             = UDim2.new(0, r*2, 0, r*2)
+			el.stroke.Color           = activeColor
+			el.stroke.Thickness       = cfg.CircleThickness
+			el.frame.BackgroundTransparency = 1
+			el.stroke.Transparency    = transp
+		end
+
+	elseif style == "Dot" then
+		local dot = self._elements.Dot
+		if dot then
+			local d = cfg.DotSize * 2
+			dot.inner.Size                   = UDim2.new(0, d, 0, d)
+			dot.inner.BackgroundColor3       = activeColor
+			dot.inner.BackgroundTransparency = transp
+		end
+	end
+end
+
+function AxiomCrosshair:OnShoot()
+	local cfg = self.Config
+	if cfg.ShootSpread and cfg.DynamicSpread then
+		self._currentSpread = math.min(self._currentSpread + cfg.SpreadAmount * 0.5, cfg.SpreadAmount)
+	end
+	if cfg.RecoilEnabled then
+		self._currentRecoil = cfg.RecoilAmount
+	end
+end
+
+function AxiomCrosshair:Set(key, value)
+	if not self.Config then return end
+	self.Config[key] = value
+	local geometryKeys = { Style = true, OutlineEnabled = true, DotEnabled = true, CircleRadius = true, DotSize = true }
+	if geometryKeys[key] then
+		self:_RebuildLines()
+	end
+end
+
+function AxiomCrosshair:SetConfig(tbl)
+	local needRebuild   = false
+	local geometryKeys  = { Style = true, OutlineEnabled = true, DotEnabled = true }
+	for k, v in pairs(tbl) do
+		self.Config[k] = v
+		if geometryKeys[k] then needRebuild = true end
+	end
+	if needRebuild then self:_RebuildLines() end
+end
+
+function AxiomCrosshair:SetEnabled(bool)
+	if not self.Config then return end
+	self.Config.Enabled = bool
+end
+
+function AxiomCrosshair:Destroy()
+	for _, c in ipairs(self._connections) do c:Disconnect() end
+	if self._screenGui then self._screenGui:Destroy() end
+	UserInputService.MouseIconEnabled = true
+end
+
+return AxiomCrosshair
