@@ -7345,139 +7345,6 @@ function Library:Playerlist(Opts)
 	return Obj;
 end;
 ApplySettingsContents = function(self)
-		local ConfigDir    = Library.Directory .. "/Configs";
-		local ThemeDir     = Library.Directory .. "/Themes";
-		local AutoLoadFile = Library.Directory .. "/Autoload.txt";
-		local function ListConfigs()
-			local Out = {};
-			if isfolder and isfolder(ConfigDir) then
-				for _, F in listfiles(ConfigDir) do
-					if string.find(F, "%.json$") then
-						local Nm = string.gsub(F, ".*[/\\]", ""):gsub("%.json$", "");
-						if not string.match(string.lower(Nm), "^autoload") then
-							table.insert(Out, Nm);
-						end;
-					end;
-				end;
-			end;
-			if #Out == 0 then table.insert(Out, "default") end;
-			return Out;
-		end;
-		local function ListThemes()
-			local Out = {};
-			if isfolder and isfolder(ThemeDir) then
-				for _, F in listfiles(ThemeDir) do
-					if string.find(F, "%.json$") then
-						local Nm = string.gsub(F, ".*[/\\]", ""):gsub("%.json$", "");
-						table.insert(Out, Nm);
-					end;
-				end;
-			end;
-			if #Out == 0 then table.insert(Out, "default") end;
-			return Out;
-		end;
-		local ConfigList, ThemeList;
-		local function ActionSaveConfig(Nm)
-			Nm = Nm or Library.Flags.ConfigName;
-			if not Nm or Nm == "" then Library:Notify("Enter a config name first", 3); return false end;
-			Library:SaveConfig(Nm);
-			ConfigList:SetOptions(ListConfigs());
-			Library:Notify("Saved config: " .. Nm, 3);
-			return true;
-		end;
-		local function ActionLoadConfig(Nm)
-			Nm = Nm or ConfigList:Get();
-			local Ok, Err = Library:LoadConfig(Nm);
-			if Ok then Library:Notify("Loaded: " .. Nm, 3) else Library:Notify(Err, 3) end;
-			return Ok;
-		end;
-		local function ActionDeleteConfig(Nm)
-			Nm = Nm or ConfigList:Get();
-			local Path = ConfigDir .. "/" .. Nm .. ".json";
-			if isfile and isfile(Path) then delfile(Path) end;
-			ConfigList:SetOptions(ListConfigs());
-			Library:Notify("Deleted: " .. Nm, 3);
-		end;
-		local function ActionRefreshConfigs()
-			ConfigList:SetOptions(ListConfigs());
-			Library:Notify("Refreshed configs", 2);
-		end;
-		local function ActionSetAutoLoad(Nm)
-			Nm = Nm or ConfigList:Get();
-			writefile(AutoLoadFile, Nm);
-			Library:Notify("Auto-load: " .. Nm, 3);
-		end;
-		local function ActionClearAutoLoad()
-			if isfile and isfile(AutoLoadFile) then writefile(AutoLoadFile, "") end;
-			Library:Notify("Auto-load cleared", 3);
-		end;
-		local function ActionSaveTheme(Nm)
-			Nm = Nm or Library.Flags.ThemeName;
-			if not Nm or Nm == "" then Library:Notify("Enter a theme name", 3); return false end;
-			writefile(ThemeDir .. "/" .. Nm .. ".json", HttpService:JSONEncode({ Accent = Library.Accent:ToHex() }));
-			ThemeList:SetOptions(ListThemes());
-			Library:Notify("Saved theme: " .. Nm, 3);
-			return true;
-		end;
-		local function ActionLoadTheme(Nm)
-			Nm = Nm or ThemeList:Get();
-			local Path = ThemeDir .. "/" .. Nm .. ".json";
-			if not (isfile and isfile(Path)) then Library:Notify("Theme not found", 3); return false end;
-			local Ok, Data = pcall(HttpService.JSONDecode, HttpService, readfile(Path));
-			if Ok and Data.Accent then
-				Library:SetAccent(Color3.fromHex(Data.Accent));
-				Library:Notify("Loaded theme: " .. Nm, 3);
-				return true;
-			end;
-			return false;
-		end;
-		local function ActionDeleteTheme(Nm)
-			Nm = Nm or ThemeList:Get();
-			local Path = ThemeDir .. "/" .. Nm .. ".json";
-			if isfile and isfile(Path) then delfile(Path) end;
-			ThemeList:SetOptions(ListThemes());
-			Library:Notify("Deleted theme: " .. Nm, 3);
-		end;
-		local function ActionRefreshThemes()
-			ThemeList:SetOptions(ListThemes());
-			Library:Notify("Refreshed themes", 2);
-		end;
-		local SecCfg = self:Section({ Name = "Configuration", Side = "Left" });
-		ConfigList = SecCfg:List({
-			Name    = "Configs";
-			Options = ListConfigs();
-			Default = "default";
-			Height  = 90;
-		});
-		SecCfg:Textbox({ Name = "Config Name", Flag = "ConfigName", Placeholder = "name..." });
-		SecCfg:Button({
-			Name = "Save";
-			Callback = function() ActionSaveConfig() end;
-		}):Button({
-			Name = "Load";
-			Callback = function() ActionLoadConfig() end;
-		});
-		SecCfg:Button({
-			Name = "Delete"; Confirm = true;
-			Callback = function() ActionDeleteConfig() end;
-		}):Button({
-			Name = "Refresh";
-			Callback = function() ActionRefreshConfigs() end;
-		});
-		SecCfg:Button({
-			Name = "Set As Auto Load";
-			Callback = function() ActionSetAutoLoad() end;
-		});
-		SecCfg:Button({
-			Name = "Remove Auto Load"; Confirm = true;
-			Callback = function() ActionClearAutoLoad() end;
-		});
-		SecCfg:Button({
-			Name = "Test Notification";
-			Callback = function()
-				Library:Notify('Hello there', 4);
-			end;
-		});
 		local SecMenu = self:Section({ Name = "Menu", Side = "Left" });
 		SecMenu:Dropdown({
 			Name    = "Tab Style"; Flag = "TabStyle";
@@ -7618,68 +7485,17 @@ ApplySettingsContents = function(self)
 				end;
 			end);
 		end;
-		local SecTheme = self:Section({ Name = "Theming", Side = "Right" });
-		local AccentPicker = SecTheme:Colorpicker({
-			Name     = "Accent"; Flag = "Accent";
-			Default  = Library.Accent;
-			Alpha    = 1;
-			Callback = function(C) Library:SetAccent(C) end;
-		});
-		SecTheme:Textbox({ Name = "Theme Name", Flag = "ThemeName", Placeholder = "theme name..." });
-		ThemeList = SecTheme:List({
-			Name    = "Themes";
-			Options = ListThemes();
-			Default = "default";
-			Height  = 80;
-		});
-		SecTheme:Button({
-			Name = "Save";
-			Callback = function() ActionSaveTheme() end;
-		}):Button({
-			Name = "Load";
-			Callback = function() ActionLoadTheme() end;
-		});
-		SecTheme:Button({
-			Name = "Delete"; Confirm = true;
-			Callback = function() ActionDeleteTheme() end;
-		}):Button({
-			Name = "Refresh";
-			Callback = function() ActionRefreshThemes() end;
-		});
-		task.delay(0.5, function()
-			if not (isfile and isfile(AutoLoadFile) and readfile) then return end;
-			local Nm = tostring(readfile(AutoLoadFile) or ""):gsub("%s+$", "");
-			if Nm == "" then return end;
-			if Library:LoadConfig(Nm) then
-				Library:Notify("Auto-loaded config: " .. Nm, 3);
-			end;
-		end);
 		local Controls = {
 			Sections = {
-				Configuration = SecCfg;
-				Menu          = SecMenu;
-				HUD           = SecHud;
-				Theming       = SecTheme;
+				Menu = SecMenu;
+				HUD  = SecHud;
 			};
-			ConfigList = ConfigList;
-			ThemeList  = ThemeList;
-			Watermark       = WatermarkToggle;
-			KeybindList     = KeybindListToggle;
-			UIScale         = UIScaleSlider;
-			LiteAnimations  = LiteToggle;
-			MenuKeybind     = MenuKeybindRow;
-			Accent          = AccentPicker;
-			FloatingButton  = MenuBtnToggle;
-			SaveConfig      = ActionSaveConfig;
-			LoadConfig      = ActionLoadConfig;
-			DeleteConfig    = ActionDeleteConfig;
-			RefreshConfigs  = ActionRefreshConfigs;
-			SetAutoLoad     = ActionSetAutoLoad;
-			ClearAutoLoad   = ActionClearAutoLoad;
-			SaveTheme       = ActionSaveTheme;
-			LoadTheme       = ActionLoadTheme;
-			DeleteTheme     = ActionDeleteTheme;
-			RefreshThemes   = ActionRefreshThemes;
+			Watermark      = WatermarkToggle;
+			KeybindList    = KeybindListToggle;
+			UIScale        = UIScaleSlider;
+			LiteAnimations = LiteToggle;
+			MenuKeybind    = MenuKeybindRow;
+			FloatingButton = MenuBtnToggle;
 			Unload = function() Library:Unload() end;
 		};
 		return Controls;
